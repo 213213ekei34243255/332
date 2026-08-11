@@ -7,6 +7,7 @@ import os
 import re
 import logging
 import uuid
+import requests
 from datetime import datetime
 import psycopg2
 import psycopg2.extras
@@ -14,7 +15,7 @@ import io
 import csv
 from functools import wraps
 LOCAL_MODEL_URL = os.environ.get("LOCAL_MODEL_URL", "http://127.0.0.1:8080/v1/chat/completions")
-INTERVIEW_API_KEY = os.environ.get("848eb13060cd5095385816d6c9c9a75bafb4d0127768072789b21357da3792bb")
+INTERVIEW_API_KEY = os.environ.get("INTERVIEW_API_KEY")
 # ---- Configuration ----
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
