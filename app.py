@@ -1,10 +1,9 @@
-
 from flask import Flask, request, jsonify, send_from_directory, make_response, send_file
+# NOTE: point this at wherever you save the fixed chat_handler.py — rename it to
+# Veronica.py (or change this import) so it matches what the rest of this file expects.
 from Veronica import get_veronica_response, load_knowledge_base, save_knowledge_base
 from flask_cors import CORS
 import os
-from agent import get_agent_plan
-import google.generativeai as genai
 import re
 import logging
 import uuid
@@ -13,7 +12,7 @@ import psycopg2
 import psycopg2.extras
 import io
 import csv
-import json
+from functools import wraps
 
 # ---- Configuration ----
 logging.basicConfig(level=logging.DEBUG)
@@ -29,31 +28,47 @@ ALLOWED_ORIGINS = {
     "https://cogniaistudios.com"
 }
 
-# Enable CORS (helps for simple cases; explicit OPTIONS handling below is the key)
 CORS(app, resources={r"/predict": {"origins": list(ALLOWED_ORIGINS)}}, methods=["POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
-# Load knowledge base
+# Load knowledge base (legacy — kept only for backward-compat with old
+# get_veronica_response signature; the fixed handler ignores its contents)
 knowledge_base = load_knowledge_base('knowledge_base.json')
 
-# Configure the Gemini model from environment variable (do not hardcode keys)
-
-
-# Optional: helper to call Gemini if needed (kept from your code)
-DATABASE_URL = os.environ.get('DATABASE_URL')  # expected to be provided in environment
-
+DATABASE_URL = os.environ.get('DATABASE_URL')
 if not DATABASE_URL:
     app.logger.warning('DATABASE_URL environment variable not set. DB logging and export will be disabled.')
 
+# ---------------------------------------------------------------
+# Simple shared-secret auth for admin/data-export endpoints.
+# Set ADMIN_API_KEY in your environment; requests must send it as
+# `Authorization: Bearer <key>` (or `X-API-Key: <key>`).
+# ---------------------------------------------------------------
+ADMIN_API_KEY = os.environ.get('ADMIN_API_KEY')
+
+
+def require_admin_key(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not ADMIN_API_KEY:
+            app.logger.error("ADMIN_API_KEY not set — refusing admin request for safety.")
+            return jsonify({"error": "Admin endpoint not configured"}), 503
+        provided = request.headers.get("X-API-Key")
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            provided = provided or auth_header.split(" ", 1)[1]
+        if provided != ADMIN_API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+        return fn(*args, **kwargs)
+    return wrapper
+
 
 def get_db_conn():
-    """Return a new psycopg2 connection using DATABASE_URL. Caller should close the connection."""
     if not DATABASE_URL:
         raise RuntimeError('DATABASE_URL not configured')
     return psycopg2.connect(DATABASE_URL, sslmode=os.environ.get('PGSSLMODE', 'prefer'))
 
 
 def init_db():
-    """Create messages table if it does not exist."""
     if not DATABASE_URL:
         return
     try:
@@ -77,7 +92,6 @@ def init_db():
         app.logger.exception('Failed to initialize DB')
 
 
-# helper to insert a message row
 def db_insert_message(session_id, role, message, reply_id=None, url=None, user_agent=None, created_at=None):
     if not DATABASE_URL:
         return
@@ -97,7 +111,6 @@ def db_insert_message(session_id, role, message, reply_id=None, url=None, user_a
         app.logger.exception('db_insert_message failed')
 
 
-# helper to fetch all conversations (ordered by created_at)
 def fetch_all_conversations():
     if not DATABASE_URL:
         return []
@@ -112,26 +125,16 @@ def fetch_all_conversations():
         return []
 
 
-# Initialize DB (create table)
 init_db()
 
-# Optional: helper to call Gemini if needed (kept from your code)
-def get_veronica_response_from_knowledge_or_gemini(text):
-    resp = get_veronica_response(text, knowledge_base)
-    if resp == "Sorry I dont know what you are talking about! ^.^":
-        resp = get_gemini_response(text)
-    return resp
 
-# DEBUG: log incoming requests (helps see if preflight reaches Flask)
 @app.before_request
 def log_request():
     app.logger.debug("Incoming %s %s", request.method, request.url)
-    app.logger.debug("Headers: %s", dict(request.headers))
 
-# /predict route: explicit OPTIONS + POST handling
+
 @app.route("/predict", methods=["OPTIONS", "POST"], strict_slashes=False)
 def predict():
-    # Preflight: securely respond with CORS headers if origin trusted
     if request.method == "OPTIONS":
         origin = request.headers.get("Origin", "")
         resp = make_response("", 204)
@@ -144,101 +147,27 @@ def predict():
 
     try:
         request_data = request.get_json() or {}
-        mode = request_data.get("mode", "chat")
         text = request_data.get("message", "")
-        goal = request_data.get("goal", "")
-        # session id may be sent by widget (optional)
         session_id = request_data.get('session_id') or request_data.get('sid') or 'unknown'
         url = request_data.get('url')
-        
         user_agent = request_data.get('user_agent') or request.headers.get('User-Agent')
 
-        if mode == "chat" and not text:
-
-            return jsonify({
-        
-                "answer": "Invalid input"
-        
-            }), 400
-        # =====================================================
-# NOAH AGENT MODE
-# =====================================================
-
-        if mode == "agent":
-        
-            goal = request_data.get("goal", "")
-        
-            observation = request_data.get("observation", {})
-        
-            memory = request_data.get("memory", {})
-        
-            if not goal:
-        
-                return jsonify({
-        
-                    "error": "Missing goal."
-        
-                }), 400
-            try:
-
-                db_insert_message(
-                    session_id,
-                    "agent",
-                    goal,
-                    reply_id=None,
-                    url=url,
-                    user_agent=user_agent
-                )
-            
-            except Exception:
-            
-                app.logger.exception("Agent logging failed")
-        
-            plan = get_agent_plan(
-        
-                goal=goal,
-        
-                observation=observation,
-        
-                memory=memory,
-        
-                session_id=session_id
-        
-            )
-            try:
-
-                db_insert_message(
-                    session_id,
-                    "planner",
-                    json.dumps(plan),
-                    reply_id=str(uuid.uuid4())[:12],
-                    url=url,
-                    user_agent=user_agent
-                )
-            
-            except Exception:
-            
-                app.logger.exception("Planner logging failed")
-        
-            return jsonify(plan), 200
+        if not text:
+            return jsonify({"answer": "Invalid input"}), 400
 
         user_text = text.strip().lower()
 
-        # 1) Detect full URL
         match = re.search(r"(https?://[^\s]+)", user_text)
         if match:
             url_match = match.group(0)
-            # log user message and bot reply indicating opening the link
             try:
                 db_insert_message(session_id, 'user', text, reply_id=None, url=url or url_match, user_agent=user_agent)
-                # create a bot reply id
                 bot_reply_id = str(uuid.uuid4())[:12]
                 db_insert_message(session_id, 'bot', f"Opening the link: {url_match}...", reply_id=bot_reply_id, url=url or url_match, user_agent=user_agent)
             except Exception:
                 app.logger.exception('logging url branch failed')
             return jsonify({"answer": f"Opening the link: {url_match}...", "url": url_match}), 200
 
-        # --- CJC MAPPING ---
         cj_base = "https://christjuniorcollege.in/"
         mapping = {
             "institution": ("Open Institution", cj_base + "about-the-institution.php"),
@@ -276,41 +205,37 @@ def predict():
             "managebac": ("Open ManageBac Login", "https://cjc.managebac.com/login")
         }
 
-        # --- FIXED COMMAND DETECTION ---
         words = user_text.split()
         if words and words[0] == "open":
             query = " ".join(words[1:]).strip()
-
             for key, (label, url_map) in mapping.items():
                 if all(word in query for word in key.split()):
-                    # log user and bot
                     try:
                         db_insert_message(session_id, 'user', text, reply_id=None, url=url, user_agent=user_agent)
                         bot_reply_id = str(uuid.uuid4())[:12]
                         db_insert_message(session_id, 'bot', f"{label}...", reply_id=bot_reply_id, url=url_map, user_agent=user_agent)
                     except Exception:
                         app.logger.exception('logging mapping branch failed')
-
                     return jsonify({"answer": f"{label}...", "url": url_map}), 200
 
-            # If no match, DO NOTHING — NO GOOGLE SEARCH
             try:
                 db_insert_message(session_id, 'user', text, reply_id=None, url=url, user_agent=user_agent)
                 bot_reply_id = str(uuid.uuid4())[:12]
                 db_insert_message(session_id, 'bot', "I couldn't find a matching command. Try again with clearer words.", reply_id=bot_reply_id, url=url, user_agent=user_agent)
             except Exception:
                 app.logger.exception('logging mapping-miss branch failed')
-
             return jsonify({"answer": "I couldn't find a matching command. Try again with clearer words."}), 200
 
-        # --- AI RESPONSE (session-aware with Redis + Gemini) ---
+        # --- AI RESPONSE ---
+        # `knowledge_base` kept only for backward compatibility with the old
+        # signature; the fixed handler accepts and ignores it. Once you've
+        # confirmed the new handler is fully wired in, this arg can be dropped.
         response = get_veronica_response(
             user_question=text,
+            session_id=session_id,
             knowledge_base=knowledge_base,
-            session_id=session_id
         )
 
-        # log user message and bot response to DB (non-blocking)
         try:
             db_insert_message(session_id, 'user', text, reply_id=None, url=url, user_agent=user_agent)
             bot_reply_id = str(uuid.uuid4())[:12]
@@ -325,16 +250,16 @@ def predict():
         return jsonify({"error": "An unexpected error occurred."}), 500
 
 
-
-# Endpoint to export all conversations as CSV
+# Now requires ADMIN_API_KEY — this was previously exposing the full
+# conversation DB (including session IDs and user agents) to anyone.
 @app.route('/export_conversations', methods=['GET'])
+@require_admin_key
 def export_conversations():
     try:
         rows = fetch_all_conversations()
         if not rows:
             return jsonify({'ok': True, 'file': None, 'message': 'No conversation rows found or DB not configured.'})
 
-        # create CSV in-memory
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(['session_id', 'role', 'message', 'reply_id', 'url', 'user_agent', 'created_at'])
@@ -359,7 +284,6 @@ def export_conversations():
         return jsonify({'ok': False, 'message': 'Export failed'}), 500
 
 
-# Static file endpoints (unchanged)
 @app.route("/widget.js")
 def widget_js():
     return send_from_directory(app.static_folder, 'widget.js')
@@ -370,11 +294,11 @@ def home():
 
 @app.route("/founders")
 def founder():
-    return send_from_directory('templates','founders.html')
+    return send_from_directory('templates', 'founders.html')
 
 @app.route("/cogniai")
 def cogniai():
-    return send_from_directory('templates','cogniai.html')
+    return send_from_directory('templates', 'cogniai.html')
 
 @app.route("/about")
 def pro():
@@ -400,15 +324,23 @@ def submit_details():
 def static_files(path):
     return send_from_directory('static', path)
 
+
+# Now requires ADMIN_API_KEY, and the argument-order bug is fixed
+# (was calling save_knowledge_base(data, path) against a
+# def save_knowledge_base(file_path, data) signature -> crashed every time).
 @app.route("/save", methods=["POST"])
+@require_admin_key
 def save():
     global knowledge_base
     new_knowledge_base = request.get_json().get("knowledge_base")
-    save_knowledge_base(new_knowledge_base, 'knowledge_base.json')
+    if not isinstance(new_knowledge_base, dict):
+        return jsonify({"error": "knowledge_base must be a JSON object"}), 400
+    save_knowledge_base('knowledge_base.json', new_knowledge_base)
     knowledge_base = new_knowledge_base
     return jsonify({"message": "Knowledge base saved successfully!"})
 
+
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    
-    app.run(host='0.0.0.0', port=port, debug=True)
+    debug_mode = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
+    app.run(host='0.0.0.0', port=port, debug=debug_mode)
