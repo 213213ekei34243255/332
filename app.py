@@ -13,7 +13,8 @@ import psycopg2.extras
 import io
 import csv
 from functools import wraps
-
+LOCAL_MODEL_URL = os.environ.get("LOCAL_MODEL_URL", "http://127.0.0.1:8080/v1/chat/completions")
+INTERVIEW_API_KEY = os.environ.get("INTERVIEW_API_KEY")
 # ---- Configuration ----
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
@@ -248,7 +249,54 @@ def predict():
     except Exception:
         app.logger.exception("Error in /predict")
         return jsonify({"error": "An unexpected error occurred."}), 500
+@app.route("/interview", methods=["OPTIONS", "POST"], strict_slashes=False)
+def interview():
+    if request.method == "OPTIONS":
+        resp = make_response("", 204)
+        resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization"
+        return resp
 
+    # Optional shared-secret check — see note below on why you probably want this.
+    if INTERVIEW_API_KEY:
+        provided = request.headers.get("X-API-Key") or ""
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            provided = provided or auth.split(" ", 1)[1]
+        if provided != INTERVIEW_API_KEY:
+            return jsonify({"error": "Unauthorized"}), 401
+
+    data = request.get_json() or {}
+    system = data.get("system", "")
+    messages = data.get("messages", [])
+    max_tokens = data.get("max_tokens", 500)
+
+    if not isinstance(messages, list) or not messages:
+        return jsonify({"error": "messages must be a non-empty array"}), 400
+
+    payload_messages = []
+    if system:
+        payload_messages.append({"role": "system", "content": system})
+    payload_messages.extend(messages)
+
+    try:
+        r = requests.post(
+            LOCAL_MODEL_URL,
+            json={
+                "model": "local",
+                "messages": payload_messages,
+                "max_tokens": max_tokens,
+                "temperature": 0.7,
+            },
+            timeout=120,
+        )
+        r.raise_for_status()
+        result = r.json()
+        content = result["choices"][0]["message"]["content"]
+        return jsonify({"message": content}), 200
+    except Exception as e:
+        app.logger.exception("interview endpoint failed")
+        return jsonify({"error": f"Local model error: {e}"}), 502
 
 # Now requires ADMIN_API_KEY — this was previously exposing the full
 # conversation DB (including session IDs and user agents) to anyone.
