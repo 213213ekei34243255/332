@@ -113,9 +113,12 @@ async function viewOverview() {
     ['Gemini AI', system.ai.configured, system.ai.mock ? 'MOCK mode (no real AI)' : system.ai.configured ? `models: ${Object.values(system.ai.models).filter(Boolean).slice(0, 2).join(', ') || 'auto'}` : 'GEMINI_API_KEY missing'],
     ['Google SMTP', system.smtp.configured || system.smtp.dry_run, system.smtp.dry_run ? 'DRY RUN (emails not sent)' : system.smtp.configured ? `${system.smtp.user} via ${system.smtp.host}:${system.smtp.port}` : 'SMTP_USER / SMTP_PASSWORD missing'],
     ['Video storage', system.storage.free_mb < 0 || system.storage.free_mb > 500, `${system.storage.used_mb} MB used · ${system.storage.free_mb} MB free`],
+    ['Data persistence', !(system.persistence?.warnings || []).length, (system.persistence?.warnings || []).length ? 'Temporary disk: data is erased on every deploy or restart' : `${system.database} database on a persistent volume`],
   ];
+  const warnings = system.persistence?.warnings || [];
   mount(view,
     h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Overview'), h('p', { class: 'muted' }, 'Recruitment pipeline at a glance.'))),
+    warnings.length ? h('div', { class: 'notice danger' }, h('strong', null, 'Your recruitment data is not safe. '), warnings.map((w) => h('div', null, w))) : null,
     h('div', { class: 'grid four' },
       card(stats.positions_open, 'Open positions', '#/positions'), card(stats.awaiting_invite, 'Awaiting invite', '#/applications'),
       card(stats.invited, 'Invited / verifying', '#/applications'), card(stats.interviewing, 'Interviewing now', '#/interviews'),
@@ -476,7 +479,8 @@ async function viewSystem() {
         !s.smtp.configured && !s.smtp.dry_run && h('div', { class: 'notice warn' }, 'Set SMTP_USER (full Gmail address) and SMTP_PASSWORD (a 16-character Google App Password) in the server environment.'),
         h('div', { class: 'row' }, to, h('button', { class: 'btn secondary small', onclick: guard(async () => { try { await call('system/test-email', { method: 'POST', json: { to: to.value } }); toast('Test email sent', 'ok'); } catch (e) { toast(e.message, 'error'); } }) }, 'Send test'))),
       h('div', { class: 'card stack' }, h('h3', null, 'Video storage'), h('dl', { class: 'kv' }, [['Location', s.storage.dir], ['Used', `${s.storage.used_mb} MB`], ['Free', s.storage.free_mb >= 0 ? `${s.storage.free_mb} MB` : 'unknown'], ['Database', s.database]].map(([k, v]) => [h('dt', null, k), h('dd', { class: 'small' }, v)])),
-        h('p', { class: 'tiny muted' }, 'Recordings are stored outside the Foyer app and the public web root, and can only be streamed by a signed-in administrator.')),
+        h('p', { class: 'tiny muted' }, 'Recordings are stored outside the Foyer app and the public web root, and can only be streamed by a signed-in administrator.'),
+        (s.persistence?.warnings || []).map((w) => h('div', { class: 'notice danger' }, w))),
       h('div', { class: 'card stack' }, h('h3', null, 'Links'), h('dl', { class: 'kv' }, [['Applicant page', `${s.public_url}/apply`], ['Interview page', `${s.public_url}/join`], ['Session length', `${s.session_hours} h`]].map(([k, v]) => [h('dt', null, k), h('dd', { class: 'small' }, v)])))),
     h('div', { class: 'section-title' }, h('h2', null, 'Audit log')),
     h('div', { class: 'card table-wrap' }, h('table', { class: 'tbl' }, h('tbody', null, audit.items.map((r) => h('tr', null, h('td', { class: 'tiny muted' }, fmtDate(r.ts)), h('td', null, r.action), h('td', { class: 'small muted' }, `${r.target || ''} ${r.detail || ''}`), h('td', { class: 'tiny muted' }, r.ip)))))));

@@ -30,6 +30,25 @@ def _int(*names, default=0):
         return default
 
 
+def is_persistent(path, *, windows=None, ismount=None):
+    """True when `path` is on a mounted volume (e.g. a Render persistent disk) rather than the container's
+    temporary filesystem, which is erased on every deploy, restart and (free tier) spin-down.
+    Always True on Windows, where this only ever runs for local development."""
+    if (os.name == "nt") if windows is None else windows:
+        return True
+    ismount = ismount or os.path.ismount
+    try:
+        p = Path(path).resolve()
+    except OSError:
+        return False
+    for q in [p, *p.parents]:
+        if q == Path(q.anchor):          # reached the filesystem root, which is always a mount
+            break
+        if ismount(str(q)):
+            return True
+    return False
+
+
 def _pick_data_dir():
     explicit = _env("STAFF_DATA_DIR")
     if explicit:
@@ -119,6 +138,25 @@ class Settings:
     @property
     def resumes_dir(self):
         return self.data_dir / "resumes"
+
+    @property
+    def files_persistent(self):
+        return is_persistent(self.data_dir)
+
+    @property
+    def database_persistent(self):
+        return bool(self.database_url) or self.files_persistent
+
+    def persistence_warnings(self):
+        """Plain-language problems that would make recruitment data vanish. Empty list = safe."""
+        out = []
+        if not self.database_persistent:
+            out.append("Positions, applications and interviews are stored on the server's temporary disk and are erased "
+                       "whenever it restarts or redeploys. Set DATABASE_URL to a Postgres database (or mount a persistent disk).")
+        if not self.files_persistent:
+            out.append(f"Recorded videos, face photos and resumes ({self.data_dir}) are on temporary disk and are erased "
+                       "on every deploy or restart. Attach a persistent disk mounted at /var/data (or set STAFF_DATA_DIR to one).")
+        return out
 
     @property
     def smtp_configured(self):

@@ -37,6 +37,17 @@ Recordings go to `STAFF_DATA_DIR` (default `/var/data/staff`, i.e. the Render pe
 Database tables (`staff_*`) are created automatically in `DATABASE_URL` (Postgres) or in a local SQLite
 file when it is not set.
 
+## Keep your data: persistence on Render (important)
+
+A Render web service's own disk is **temporary**: it is erased on every deploy, restart and (free tier) spin-down.
+Without the two settings below, positions, applications, interviews and recorded videos disappear. The dashboard
+now shows a red warning (Overview and System) whenever it detects this.
+
+1. **Database:** set `DATABASE_URL` to a Postgres database (Render Postgres, Neon, Supabase...). All staff tables
+   (`staff_*`) are created automatically. Without it the system falls back to a SQLite file on the temporary disk.
+2. **Videos, photos, resumes:** attach a **persistent disk** to the service in Render (Disks) mounted at `/var/data`
+   (a paid-instance feature). Recordings are written to `/var/data/staff`. Without a mounted disk they are lost on redeploy.
+
 ## How the interview works
 
 * **Plan** – before the first question, Gemini reads the position (skills, eligibility, objectives),

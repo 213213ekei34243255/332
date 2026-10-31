@@ -64,6 +64,8 @@ def init_staff(app):
         log.warning("GEMINI_API_KEY not set: the AI interviewer is unavailable.")
     if not settings.smtp_configured:
         log.warning("SMTP_USER / SMTP_PASSWORD not set: invitation emails cannot be sent.")
+    for warning in settings.persistence_warnings():
+        log.warning("DATA WILL BE LOST: %s", warning)
     log.info("Staff system ready (db=%s, data=%s)", "postgres" if db.is_pg else "sqlite", settings.data_dir)
     threading.Thread(target=services.recover, daemon=True, name="staff-recover").start()
     return services

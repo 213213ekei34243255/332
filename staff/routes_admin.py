@@ -85,6 +85,8 @@ def system():
                  "from_name": s.smtp_from_name, "dry_run": s.email_dry_run},
         "storage": {"dir": str(s.data_dir), "free_mb": svc().storage.free_mb(), "used_mb": svc().storage.used_mb()},
         "database": "postgres" if svc().db.is_pg else "sqlite",
+        "persistence": {"database_persistent": s.database_persistent, "files_persistent": s.files_persistent,
+                        "warnings": s.persistence_warnings()},
         "public_url": s.public_url or request.url_root.rstrip("/"),
         "org": s.org_name, "session_hours": s.session_hours}})
 
