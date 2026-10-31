@@ -164,7 +164,7 @@ async function viewPositionEditor(id) {
   const text = (obj, key, props = {}) => h('input', { type: 'text', value: obj[key] ?? '', oninput: (e) => { obj[key] = e.target.value; }, ...props });
   const area = (obj, key, rows = 3, props = {}) => h('textarea', { rows, oninput: (e) => { obj[key] = e.target.value; }, ...props }, obj[key] ?? '');
   const num = (obj, key, props = {}) => h('input', { type: 'number', value: obj[key] ?? '', oninput: (e) => { obj[key] = e.target.value === '' ? '' : Number(e.target.value); }, ...props });
-  const sel = (obj, key, options) => h('select', { onchange: (e) => { obj[key] = e.target.value; } }, options.map(([v, l]) => h('option', { value: v, selected: obj[key] === v }, l)));
+  const sel = (obj, key, options) => h('select', { onchange: (e) => { obj[key] = e.target.value; } }, options.map(([v, l]) => h('option', { value: v, selected: String(obj[key]) === String(v) }, l)));
   const list = (obj, key) => h('input', { type: 'text', value: csv(obj[key]), placeholder: 'comma separated', oninput: (e) => { obj[key] = e.target.value.split(',').map((s) => s.trim()).filter(Boolean); } });
   const check = (obj, key, label) => h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!obj[key], onchange: (e) => { obj[key] = e.target.checked; } }), h('span', null, label));
 
