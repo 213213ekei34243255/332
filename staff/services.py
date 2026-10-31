@@ -295,11 +295,14 @@ class Services:
                 log.exception("auto-invite failed")
         return {"id": app_id, "duplicate": False, "auto_invited": auto, "application": application}
 
-    def update_application(self, app_id, data):
+    def update_application(self, app_id, data, actor="admin"):
+        """Save a decision / notes. With data["notify"] a decision email goes to the applicant.
+        Returns (application, email) where email is None, {"id", "kind"} or {"skipped": reason}."""
         application = self.db.get("applications", app_id)
         if not application:
             raise ServiceError("Application not found.", 404)
         values = {"updated_at": now_ms()}
+        decision = ""
         if "decision" in data:
             decision = clean_str(data["decision"], 20)
             if decision not in ("", "shortlisted", "on_hold", "rejected", "hired"):
@@ -308,7 +311,61 @@ class Services:
         if "admin_notes" in data:
             values["admin_notes"] = clean_str(data["admin_notes"], 4000, multiline=True)
         self.db.update("applications", app_id, values)
-        return self.db.get("applications", app_id)
+        email = None
+        if data.get("notify") and decision:
+            email = self.send_decision_email(app_id, decision, subject=data.get("subject"), message=data.get("message"),
+                                             force=bool(data.get("force")), actor=actor)
+        return self.db.get("applications", app_id), email
+
+    def decision_email_preview(self, app_id, decision):
+        """What would be sent for this decision (editable default), plus any decision emails already sent."""
+        application = self.db.get("applications", app_id)
+        if not application:
+            raise ServiceError("Application not found.", 404)
+        position = self.db.get("positions", application["position_id"])
+        defaults = mailer.default_decision_email(decision, position_title=position["title"], org_name=self.s.org_name)
+        if not defaults:
+            raise ServiceError("No email is sent for this decision.", 400)
+        earlier = self.db.all(
+            "SELECT kind, status, created_at FROM emails WHERE application_id = ? AND kind IN (?,?) ORDER BY created_at DESC",
+            (app_id, "decision_passed", "decision_rejected"))
+        return {"to": application["email"], "subject": defaults[0], "message": defaults[1],
+                "kind": f"decision_{mailer.decision_kind(decision)}", "earlier": earlier}
+
+    def send_decision_email(self, app_id, decision, subject=None, message=None, force=False, actor="admin"):
+        kind = mailer.decision_kind(decision)
+        if not kind:
+            return {"skipped": "no_email_for_decision"}
+        application = self.db.get("applications", app_id)
+        position = self.db.get("positions", application["position_id"])
+        default_subject, default_message = mailer.default_decision_email(
+            decision, position_title=position["title"], org_name=self.s.org_name)
+        email_kind = f"decision_{kind}"
+        if not force and self.db.one("SELECT id FROM emails WHERE application_id = ? AND kind = ? AND status IN (?,?)",
+                                     (app_id, email_kind, "queued", "sent")):
+            return {"skipped": "already_sent", "kind": email_kind}
+        subject, text, html = mailer.render_message(
+            name=application["full_name"], org_name=self.s.org_name,
+            subject=clean_str(subject, 200) or default_subject,
+            message=clean_str(message, 3000, multiline=True) or default_message,
+            preheader="An update on your application")
+        email_id = self.mail.enqueue(to_addr=application["email"], subject=subject, text_body=text, html_body=html,
+                                     kind=email_kind, application_id=app_id)
+        self.db.audit(actor, "decision_email", app_id, email_kind)
+        return {"id": email_id, "kind": email_kind}
+
+    def _send_interview_done_email(self, application_id):
+        """Thank-you sent once when an applicant finishes their interview. Never blocks finishing."""
+        try:
+            application = self.db.get("applications", application_id)
+            position = self.db.get("positions", application["position_id"])
+            subject, message = mailer.default_interview_done_email(position_title=position["title"], org_name=self.s.org_name)
+            subject, text, html = mailer.render_message(name=application["full_name"], org_name=self.s.org_name,
+                                                        subject=subject, message=message, preheader="We received your interview")
+            self.mail.enqueue(to_addr=application["email"], subject=subject, text_body=text, html_body=html,
+                              kind="interview_done", application_id=application_id)
+        except Exception:
+            log.exception("interview-done email failed")
 
     def delete_application(self, app_id):
         application = self.db.get("applications", app_id)
@@ -620,6 +677,8 @@ class Services:
                 state = iv["state"] or {}
                 state["end_reason"] = reason
                 self.db.update("interviews", iv["id"], {"state": state})
+            if reason in ("completed", "candidate_ended"):      # not for abandoned/errored sessions
+                self._send_interview_done_email(enrollment["application_id"])
             threading.Thread(target=self.run_evaluation, args=(iv["id"],), daemon=True, name="staff-eval").start()
         return {"interview_id": iv["id"]}
 

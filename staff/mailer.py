@@ -308,3 +308,54 @@ def render_test(*, org_name):
             "will be delivered the same way.</p>")
     text = "SMTP is working. This is a test message from the staff dashboard.\n"
     return subject, text, _shell(subject, "SMTP test", html)
+
+
+# ---------------------------------------------------------------- decision + follow-up emails
+PASSED_DECISIONS = ("shortlisted", "hired")
+
+
+def decision_kind(decision):
+    """Which email a decision maps to: 'passed' (cleared the first round), 'rejected', or None (no email)."""
+    if decision in PASSED_DECISIONS:
+        return "passed"
+    return "rejected" if decision == "rejected" else None
+
+
+def default_decision_email(decision, *, position_title, org_name):
+    """(subject, editable message) for a decision. The greeting and sign-off are added by render_message."""
+    kind = decision_kind(decision)
+    if kind == "passed":
+        return (f"Update on your application for {position_title} — {org_name}",
+                f"Thank you for taking the time to complete your first-round interview for the {position_title} position "
+                f"at {org_name}. We are pleased to let you know that you have passed the first round.\n\n"
+                "The Management will call you back soon to discuss the next steps. We will also be arranging a school meet "
+                "at the college shortly, and we will let you know the date, time and venue in advance.\n\n"
+                "Please keep your phone available over the coming days. If your contact details have changed, simply "
+                "reply to this email.")
+    if kind == "rejected":
+        return (f"Your application for {position_title} — {org_name}",
+                f"Thank you for applying for the {position_title} position at {org_name} and for the time you spent on "
+                "your interview.\n\n"
+                "After careful review by our hiring team, we have decided not to move forward with your application at "
+                "this stage. This was not an easy decision, and it applies only to this role.\n\n"
+                f"We appreciate your interest in {org_name} and encourage you to apply for future openings that match "
+                "your skills. We wish you every success.")
+    return None
+
+
+def default_interview_done_email(*, position_title, org_name):
+    return (f"We received your interview for {position_title} — {org_name}",
+            f"Thank you for completing your interview for the {position_title} position at {org_name}. Your recording "
+            "and responses have been received and will be reviewed by our hiring team.\n\n"
+            "You do not need to do anything else for now. We will contact you once a decision has been made.")
+
+
+def render_message(*, name, org_name, subject, message, preheader):
+    """Greeting + the (editable) message paragraphs + sign-off, as (subject, text, html). Input is escaped."""
+    first = (name or "there").split()[0]
+    paras = [p.strip() for p in re.split(r"\n\s*\n", message or "") if p.strip()]
+    body = "".join(f'<p style="margin:0 0 14px;">{escape(p).replace(chr(10), "<br>")}</p>' for p in paras)
+    html = (f'<p style="margin:0 0 14px;font-size:17px;font-weight:600;">Dear {escape(first)},</p>{body}'
+            f'<p style="margin:18px 0 0;">Kind regards,<br><strong>The {escape(org_name)} Recruitment Team</strong></p>')
+    text = f"Dear {first},\n\n" + "\n\n".join(paras) + f"\n\nKind regards,\nThe {org_name} Recruitment Team\n"
+    return subject, text, _shell(subject, preheader, html)

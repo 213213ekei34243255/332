@@ -61,6 +61,9 @@ def admin(client):
         def put(self, url, json=None):
             return client.put(url, json=json, headers={"X-CSRF-Token": csrf})
 
+        def patch(self, url, json=None):
+            return client.patch(url, json=json, headers={"X-CSRF-Token": csrf})
+
         def delete(self, url):
             return client.delete(url, headers={"X-CSRF-Token": csrf})
     return A()

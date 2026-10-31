@@ -43,6 +43,33 @@ function pagerEl(data, go) {
 }
 const link = (hash, text) => h('a', { href: hash }, text);
 
+// Decisions that email the applicant: passed the first round (shortlisted / hired) or rejected.
+// The admin always sees and can edit the message first, and can save without sending.
+const EMAILED = ['shortlisted', 'hired', 'rejected'];
+async function setDecision(appId, current, d, done) {
+  if (current === d || !EMAILED.includes(d)) {         // clearing a decision, or "on hold": nothing to email
+    await call(`applications/${appId}`, { method: 'PATCH', json: { decision: current === d ? '' : d } });
+    toast(current === d ? 'Decision cleared' : `Marked ${DECISION[d][0].toLowerCase()}`, 'ok');
+    return done();
+  }
+  const prev = (await call(`applications/${appId}/decision-email?decision=${d}`)).email;
+  const subject = h('input', { type: 'text', value: prev.subject, maxlength: 200 });
+  const message = h('textarea', { rows: 12, maxlength: 3000 }, prev.message);
+  const send = h('input', { type: 'checkbox', checked: true });
+  modal(`Mark as ${DECISION[d][0].toLowerCase()}`, h('div', { class: 'stack' },
+    prev.earlier.length > 0 && h('div', { class: 'notice warn' }, `A decision email was already sent to this applicant (${prev.earlier.map((e) => `${e.kind.replace('decision_', '')}, ${e.status}`).join('; ')}).`),
+    h('p', { class: 'small muted' }, 'The email goes to ', h('strong', null, prev.to), '. The greeting and sign-off are added automatically.'),
+    field('Subject', subject), field('Message', message),
+    h('label', { class: 'check' }, send, h('span', null, 'Email this to the applicant when I save'))),
+  [{ label: 'Cancel', kind: 'secondary' }, { label: 'Save decision', onClick: async () => {
+    try {
+      const r = await call(`applications/${appId}`, { method: 'PATCH', json: { decision: d, notify: send.checked, subject: subject.value, message: message.value } });
+      toast(r.email?.id ? 'Decision saved and email queued' : r.email?.skipped === 'already_sent' ? 'Decision saved (that email was already sent earlier)' : 'Decision saved', 'ok');
+      done();
+    } catch (e) { toast(e.message, 'error'); return false; }
+  } }]);
+}
+
 // ------------------------------------------------------------------ session
 function showLogin(msg) {
   $('#app').hidden = true; $('#login').hidden = false; $('#login-org').textContent = A.org;
@@ -304,8 +331,7 @@ async function viewApplication(id) {
   const p = a.profile || {};
   const en = a.enrollments[0];
   const kv = (rows) => h('dl', { class: 'kv' }, rows.filter(([, v]) => v !== undefined && v !== null && v !== '').map(([k, v]) => [h('dt', null, k), h('dd', null, v)]));
-  const decisionBar = h('div', { class: 'decision-bar' }, ['shortlisted', 'on_hold', 'rejected', 'hired'].map((d) => h('button', { class: `btn secondary small ${a.decision === d ? 'on' : ''}`, onclick: guard(async () => {
-    const next = a.decision === d ? '' : d; await call(`applications/${id}`, { method: 'PATCH', json: { decision: next } }); toast(next ? `Marked ${DECISION[next][0].toLowerCase()}` : 'Decision cleared', 'ok'); viewApplication(id).then(() => {}); }) }, DECISION[d][0])));
+  const decisionBar = h('div', { class: 'decision-bar' }, ['shortlisted', 'on_hold', 'rejected', 'hired'].map((d) => h('button', { class: `btn secondary small ${a.decision === d ? 'on' : ''}`, onclick: guard(() => setDecision(id, a.decision, d, () => viewApplication(id))) }, DECISION[d][0])));
   const notes = h('textarea', { rows: 4, maxlength: 4000, placeholder: 'Internal notes (never shown to the applicant)' }, a.admin_notes || '');
   const iv = a.interviews[0];
   mount(view,
@@ -438,8 +464,7 @@ async function viewInterview(id) {
         h('p', { class: 'tiny muted' }, 'Signals are informational (e.g. a face briefly out of frame) and are not proof of wrongdoing. They do not change the AI score.'), iv.flags.length > 0 && h('div', { class: 'notice warn' }, h('strong', null, 'Interviewer flags: '), iv.flags.join(' · '))));
   }
 
-  const decisionBar = h('div', { class: 'decision-bar' }, ['shortlisted', 'on_hold', 'rejected', 'hired'].map((d) => h('button', { class: `btn secondary small ${a.decision === d ? 'on' : ''}`, onclick: guard(async () => {
-    const next = a.decision === d ? '' : d; await call(`applications/${a.id}`, { method: 'PATCH', json: { decision: next } }); toast(next ? `Marked ${DECISION[next][0].toLowerCase()}` : 'Decision cleared', 'ok'); viewInterview(id); }) }, DECISION[d][0])));
+  const decisionBar = h('div', { class: 'decision-bar' }, ['shortlisted', 'on_hold', 'rejected', 'hired'].map((d) => h('button', { class: `btn secondary small ${a.decision === d ? 'on' : ''}`, onclick: guard(() => setDecision(a.id, a.decision, d, () => viewInterview(id))) }, DECISION[d][0])));
 
   function drawTab() {
     mount(body, tab === 'assessment' ? assessment() : tab === 'transcript' ? transcript() : tab === 'applicant' ? applicantTab() : coverageTab());

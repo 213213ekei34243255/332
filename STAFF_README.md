@@ -37,6 +37,22 @@ Recordings go to `STAFF_DATA_DIR` (default `/var/data/staff`, i.e. the Render pe
 Database tables (`staff_*`) are created automatically in `DATABASE_URL` (Postgres) or in a local SQLite
 file when it is not set.
 
+## Emails the system sends
+
+| Email | When | Notes |
+|---|---|---|
+| Application received | applicant submits the form | automatic |
+| Interview invitation | admin generates a code (or auto-invite) | personal code + instructions |
+| New application alert | every application, if `STAFF_NOTIFY_EMAIL` is set | to the admin |
+| Interview received | applicant finishes the interview (not for abandoned sessions) | automatic, sent once, never includes scores |
+| Decision: passed the first round | admin marks **Shortlisted** or **Hired** | says the Management will call back and a school meet at the college will be arranged soon |
+| Decision: not selected | admin marks **Rejected** | polite, no scores or AI feedback |
+
+Decision emails are never silent: choosing a decision opens a dialog showing the exact subject and message (editable) with
+"Email this to the applicant" ticked; untick it to save the decision without sending. "On hold" and clearing a decision
+never send. The same email is not sent twice (a later "Hired" after "Shortlisted" is skipped), and everything appears in
+the Email log. Edit the default wording in `default_decision_email()` in `staff/mailer.py`.
+
 ## Keep your data: persistence on Render (important)
 
 A Render web service's own disk is **temporary**: it is erased on every deploy, restart and (free tier) spin-down.

@@ -210,9 +210,17 @@ def get_application(app_id):
 @bp.patch("/applications/<app_id>")
 @admin_required
 def patch_application(app_id):
-    app = svc().update_application(app_id, request.get_json(silent=True) or {})
-    svc().db.audit("admin", "update_application", app_id, str({k: v for k, v in (request.get_json(silent=True) or {}).items() if k == "decision"}), client_ip())
-    return jsonify({"ok": True, "application": {"id": app["id"], "decision": app["decision"]}})
+    data = request.get_json(silent=True) or {}
+    app, email = svc().update_application(app_id, data)
+    svc().db.audit("admin", "update_application", app_id, str({k: v for k, v in data.items() if k in ("decision", "notify")}), client_ip())
+    return jsonify({"ok": True, "application": {"id": app["id"], "decision": app["decision"]}, "email": email})
+
+
+@bp.get("/applications/<app_id>/decision-email")
+@admin_required
+def decision_email(app_id):
+    """Preview of the email a decision would send (the dashboard lets you edit it before saving)."""
+    return jsonify({"ok": True, "email": svc().decision_email_preview(app_id, clean_str(request.args.get("decision"), 20))})
 
 
 @bp.delete("/applications/<app_id>")
