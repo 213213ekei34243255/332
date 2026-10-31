@@ -1,0 +1,16 @@
+.wrap { max-width: 920px; margin: 0 auto; padding: 0 18px; }
+.topbar { background: var(--navy); color: #fff; padding: 14px 0; }
+.topbar .btn.secondary { background: rgba(255,255,255,.1); color: #fff; border-color: rgba(255,255,255,.25); }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 17px; }
+.logo-dot { width: 14px; height: 14px; border-radius: 50%; background: linear-gradient(135deg, #4b8df5, #1fd1b1); }
+.hero { padding: 34px 0 20px; } .hero h1 { font-size: 30px; }
+main.wrap { padding-bottom: 60px; }
+.role { display: flex; flex-direction: column; gap: 10px; }
+.role h3 { margin: 0; font-size: 18px; }
+.role .meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.role p.desc { color: var(--muted); font-size: 14px; margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.h-legend { font-weight: 700; font-size: 15px; padding: 0; margin-bottom: 4px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.big-check { width: 54px; height: 54px; border-radius: 50%; background: var(--ok-soft); color: var(--ok); font-size: 28px; display: inline-flex; align-items: center; justify-content: center; margin: 4px auto 10px; }
+#done { padding: 36px 20px; }

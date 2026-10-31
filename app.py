@@ -32,6 +32,17 @@ ALLOWED_ORIGINS = {
 
 CORS(app, resources={r"/predict": {"origins": list(ALLOWED_ORIGINS)}}, methods=["POST", "OPTIONS"], allow_headers=["Content-Type", "Authorization"])
 
+# ---- Staff recruitment system ------------------------------------------------
+# Self-contained module (see staff/ and STAFF_README.md): /staff admin dashboard, /apply enrollment,
+# /join interview room, /api/recruit/* + /staff/api/* endpoints, Gemini interviewer, Google SMTP
+# invitations and private video storage. It never touches the Veronica chatbot routes below, and a
+# failure to start it must not take the rest of the site down.
+try:
+    from staff import init_staff
+    init_staff(app)
+except Exception:
+    app.logger.exception("Staff recruitment module failed to initialise; the rest of the app is unaffected")
+
 # Load knowledge base (legacy — kept only for backward-compat with old
 # get_veronica_response signature; the fixed handler ignores its contents)
 knowledge_base = load_knowledge_base('knowledge_base.json')
@@ -274,6 +285,16 @@ def interview():
 
     if not isinstance(messages, list) or not messages:
         return jsonify({"error": "messages must be a non-empty array"}), 400
+
+    # Gemini answers the Foyer interview when GEMINI_API_KEY is set (INTERVIEW_BACKEND=local forces
+    # the old local model); any Gemini failure falls through to the local model below.
+    if os.environ.get("INTERVIEW_BACKEND", "gemini").lower() != "local":
+        try:
+            from staff import legacy
+            if legacy.available():
+                return jsonify({"message": legacy.chat(system, messages, max_tokens)}), 200
+        except Exception:
+            app.logger.exception("Gemini interview call failed; falling back to the local model")
 
     payload_messages = []
     if system:

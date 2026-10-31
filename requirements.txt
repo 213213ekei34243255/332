@@ -21,4 +21,7 @@ urllib3==2.2.1
 Werkzeug==3.0.3
 wheel
 google-generativeai
+google-genai>=2.25.0,<3
 python-docx
+pypdf
+Pillow

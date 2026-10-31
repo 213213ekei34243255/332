@@ -57,10 +57,9 @@ import google.generativeai as genai
 # --------------------
 # Redis Configuration
 # --------------------
-REDIS_URL = os.getenv(
-    "REDIS_URL",
-    "rediss://default:AYJVAAIncDJkYmE1M2FiNWMwNTk0OTI2OWVhODVmMDcxNzU1YjEwYXAyMzMzNjU@related-ox-33365.upstash.io:6379"
-)
+# The Redis credential that used to be hard-coded here was committed to source control and must be
+# treated as leaked: rotate it in Upstash and set the new value as the REDIS_URL environment variable.
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 redis_client = redis.Redis.from_url(
     REDIS_URL,

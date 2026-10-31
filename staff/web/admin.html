@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Staff dashboard</title>
+  <link rel="icon" href="/static/favicon.png">
+  <link rel="stylesheet" href="/staff-static/base.css">
+  <link rel="stylesheet" href="/staff-static/admin.css">
+</head>
+<body>
+  <div id="login" class="login-wrap" hidden>
+    <form id="login-form" class="card login-card stack">
+      <div class="brand dark"><span class="logo-dot"></span><span id="login-org">Staff dashboard</span></div>
+      <h1>Sign in</h1>
+      <p class="muted small">Recruitment administration. Authorised staff only.</p>
+      <div class="notice danger" id="login-error" role="alert" hidden></div>
+      <div><label class="field" for="password">Admin password</label><input type="password" id="password" autocomplete="current-password" required></div>
+      <button class="btn block" type="submit" id="login-btn">Sign in</button>
+    </form>
+  </div>
+
+  <div id="app" class="shell" hidden>
+    <aside class="side" id="side">
+      <div class="brand"><span class="logo-dot"></span><span id="org">Staff</span></div>
+      <nav class="nav" id="nav">
+        <a href="#/overview" data-route="overview">Overview</a>
+        <a href="#/positions" data-route="positions">Positions</a>
+        <a href="#/applications" data-route="applications">Applications</a>
+        <a href="#/interviews" data-route="interviews">Interviews &amp; videos</a>
+        <a href="#/emails" data-route="emails">Email log</a>
+        <a href="#/system" data-route="system">System</a>
+      </nav>
+      <div class="side-foot">
+        <a class="small" href="/apply" target="_blank" rel="noopener">Public application page &#8599;</a>
+        <button class="btn secondary small block" id="logout-btn">Sign out</button>
+      </div>
+    </aside>
+    <div class="main">
+      <header class="mobile-bar"><button class="btn secondary small" id="menu-btn" aria-label="Menu">&#9776;</button><strong id="mobile-title">Staff</strong></header>
+      <main id="view" class="view" tabindex="-1"></main>
+    </div>
+  </div>
+  <script type="module" src="/staff-static/admin.js"></script>
+</body>
+</html>

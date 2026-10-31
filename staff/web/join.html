@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="en" class="force-dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Your interview</title>
+  <link rel="icon" href="/static/favicon.png">
+  <link rel="stylesheet" href="/staff-static/base.css">
+  <link rel="stylesheet" href="/staff-static/join.css">
+</head>
+<body class="room-theme">
+  <header class="topbar">
+    <div class="wrap row between">
+      <div class="brand"><span class="logo-dot"></span><span id="org">Interview</span></div>
+      <div class="row">
+        <span class="badge" id="rec-chip" hidden><span class="rec-dot"></span> Recording</span>
+        <span class="badge" id="timer-chip" hidden>00:00</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <noscript><div class="notice danger">JavaScript is required for the interview.</div></noscript>
+
+    <!-- 1. code -->
+    <section id="stage-code" data-stage>
+      <div class="card narrow">
+        <h1>Join your interview</h1>
+        <p class="muted">Enter the code from your invitation email.</p>
+        <div class="notice danger" id="code-error" role="alert" hidden></div>
+        <form id="code-form" class="stack" autocomplete="off">
+          <input type="text" id="code" class="code-input mono" placeholder="ABCD-2345" maxlength="12" inputmode="text" autocapitalize="characters" spellcheck="false" aria-label="Interview code">
+          <button class="btn block" type="submit" id="code-btn">Continue</button>
+        </form>
+        <p class="tiny muted">Need a code? <a href="/apply">Apply for a role</a>.</p>
+      </div>
+    </section>
+
+    <!-- 2. welcome / consent -->
+    <section id="stage-welcome" data-stage hidden>
+      <div class="card">
+        <h1 id="welcome-title">Welcome</h1>
+        <p class="muted" id="welcome-sub"></p>
+        <div class="grid two">
+          <div>
+            <h3>How it works</h3>
+            <ol class="steps">
+              <li>Quick camera and microphone check</li>
+              <li>A short face verification</li>
+              <li>A spoken conversation with an AI interviewer (<span id="w-duration">15</span> minutes)</li>
+            </ol>
+          </div>
+          <div>
+            <h3>Before you start</h3>
+            <ul class="steps">
+              <li>Find a quiet, well-lit room and sit alone</li>
+              <li>Use a laptop or desktop; headphones help</li>
+              <li>Just talk naturally &mdash; the interviewer replies when you pause</li>
+              <li>Keep this tab open until the end</li>
+            </ul>
+          </div>
+        </div>
+        <div class="notice warn"><strong>Recording notice.</strong> The whole session (video and audio) is recorded and your answers are assessed with the help of AI. The hiring team reviews every recording and assessment; people make the final decision.</div>
+        <label class="check consent"><input type="checkbox" id="consent"><span>I understand and consent to being recorded and assessed.</span></label>
+        <button class="btn" id="welcome-next" disabled>Begin device check</button>
+      </div>
+    </section>
+
+    <!-- 3. device check -->
+    <section id="stage-devices" data-stage hidden>
+      <div class="card">
+        <h2>Device check</h2>
+        <div class="notice danger" id="devices-error" role="alert" hidden></div>
+        <div class="grid two">
+          <div class="video-wrap"><video id="preview" class="cam" autoplay muted playsinline></video></div>
+          <div class="stack">
+            <div><label class="field" for="cam-select">Camera</label><select id="cam-select"></select></div>
+            <div><label class="field" for="mic-select">Microphone</label><select id="mic-select"></select></div>
+            <div>
+              <label class="field">Microphone level <span class="muted tiny" id="mic-hint">&mdash; say something</span></label>
+              <div class="bar meter"><i id="mic-bar"></i></div>
+            </div>
+            <div class="row wrap"><button class="btn secondary small" id="speaker-test" type="button">&#128266; Test speakers</button><span class="tiny muted" id="speaker-status"></span></div>
+            <ul class="checks" id="checks"></ul>
+          </div>
+        </div>
+        <div class="row"><button class="btn" id="devices-next" disabled>Continue</button></div>
+      </div>
+    </section>
+
+    <!-- 4. face verification -->
+    <section id="stage-face" data-stage hidden>
+      <div class="card">
+        <h2>Face verification</h2>
+        <p class="muted small">This confirms a real person is taking the interview. The check runs in your browser; only one verification photo is sent and stored securely.</p>
+        <div class="notice danger" id="face-error" role="alert" hidden></div>
+        <div class="face-grid">
+          <div class="video-wrap face-frame"><video id="face-video" class="cam" autoplay muted playsinline></video><div class="oval" id="oval"></div></div>
+          <div class="stack">
+            <div class="face-instruction" id="face-instruction" aria-live="assertive">Preparing…</div>
+            <div class="face-warning" id="face-warning" aria-live="polite"></div>
+            <ul class="chips-col" id="face-steps"></ul>
+            <div class="row"><button class="btn" id="face-start" disabled>Start verification</button><span class="spinner" id="face-spinner" hidden></span></div>
+            <p class="tiny muted" id="face-load">Loading face detection…</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. preparing -->
+    <section id="stage-prep" data-stage hidden>
+      <div class="card narrow center">
+        <div class="spinner big" id="prep-spinner"></div>
+        <h2 id="prep-title">Preparing your interview…</h2>
+        <p class="muted" id="prep-sub">Your interviewer is reading the role and your background. This takes a few seconds.</p>
+        <div class="notice danger" id="prep-error" role="alert" hidden></div>
+        <button class="btn" id="prep-begin" hidden>Begin interview</button>
+        <button class="btn secondary" id="prep-retry" hidden>Try again</button>
+      </div>
+    </section>
+
+    <!-- 6. interview room -->
+    <section id="stage-room" data-stage hidden data-phase="idle">
+      <div class="notice warn" id="room-banner" role="status" hidden></div>
+      <div class="room-grid">
+        <div class="tile ai-tile">
+          <div class="orb-wrap"><div class="orb" id="orb"></div></div>
+          <div class="persona" id="persona">Interviewer</div>
+          <div class="phase" id="phase" aria-live="polite">Getting ready…</div>
+          <div class="caption ai-caption" id="ai-caption"></div>
+        </div>
+        <div class="tile me-tile">
+          <div class="video-wrap"><video id="room-video" class="cam" autoplay muted playsinline></video><div class="presence-warn" id="presence-warn" hidden></div></div>
+          <div class="caption me-caption" id="me-caption"></div>
+        </div>
+      </div>
+      <div class="progress"><div class="bar"><i id="progress-bar"></i></div><span class="tiny muted" id="progress-text"></span></div>
+      <div class="controls">
+        <button class="btn" id="btn-done" hidden>I’m done answering</button>
+        <button class="btn secondary" id="btn-repeat" hidden>Repeat the question</button>
+        <button class="btn secondary" id="btn-skip" hidden>Skip interviewer speech</button>
+        <button class="btn secondary" id="btn-type" hidden>Type instead</button>
+        <button class="btn secondary danger-ghost" id="btn-end">End interview</button>
+      </div>
+      <div class="type-box" id="type-box" hidden>
+        <textarea id="type-input" rows="3" maxlength="3000" placeholder="Type your answer…"></textarea>
+        <div class="row"><button class="btn" id="type-send">Send answer</button><button class="btn ghost" id="type-cancel" type="button">Cancel</button></div>
+      </div>
+      <details class="log-wrap"><summary>Conversation so far</summary><div class="log" id="log"></div></details>
+    </section>
+
+    <!-- 7. done -->
+    <section id="stage-done" data-stage hidden>
+      <div class="card narrow center">
+        <div class="big-check" id="done-icon"><span class="spinner big"></span></div>
+        <h2 id="done-title">Wrapping up…</h2>
+        <p class="muted" id="done-sub">Saving your recording. Please keep this tab open.</p>
+        <div class="bar upload-bar" id="upload-wrap"><i id="upload-bar"></i></div>
+        <p class="tiny muted" id="upload-text"></p>
+        <button class="btn secondary" id="upload-retry" hidden>Retry upload</button>
+      </div>
+    </section>
+
+    <!-- 8. fatal -->
+    <section id="stage-error" data-stage hidden>
+      <div class="card narrow center">
+        <h2>We hit a problem</h2>
+        <p class="muted" id="fatal-msg"></p>
+        <button class="btn" id="fatal-retry">Reload</button>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="/staff-static/join.js"></script>
+</body>
+</html>
