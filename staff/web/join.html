@@ -4,18 +4,24 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Your interview</title>
-  <link rel="icon" href="/static/favicon.png">
+  <meta name="theme-color" content="#04050a">
+  <title>Your interview — Christ Junior College</title>
+  <link rel="icon" href="/staff-static/img/favicon.png">
   <link rel="stylesheet" href="/staff-static/base.css">
   <link rel="stylesheet" href="/staff-static/join.css">
 </head>
 <body class="room-theme">
   <header class="topbar">
     <div class="wrap row between">
-      <div class="brand"><span class="logo-dot"></span><span id="org">Interview</span></div>
+      <div class="brandbar">
+        <img class="logo-cjc" src="/staff-static/img/cjc-logo.png" alt="Christ Junior College, Bengaluru-29" width="130" height="43">
+        <span class="sep" aria-hidden="true"></span>
+        <img class="logo-cogni" src="/staff-static/img/cogniai-logo.png" alt="CogniAI Studios" width="88" height="38">
+      </div>
       <div class="row">
         <span class="badge" id="rec-chip" hidden><span class="rec-dot"></span> Recording</span>
         <span class="badge" id="timer-chip" hidden>00:00</span>
+        <span class="badge info" id="org">Interview</span>
       </div>
     </div>
   </header>
@@ -26,8 +32,8 @@
     <!-- 1. code -->
     <section id="stage-code" data-stage>
       <div class="card narrow">
-        <h1>Join your interview</h1>
-        <p class="muted">Enter the code from your invitation email.</p>
+        <h1>Join your <span class="glow-text">interview</span></h1>
+        <p class="muted">Enter the code from your invitation email. You can take the interview in English, Malayalam, Kannada, Tamil, Telugu or Hindi.</p>
         <div class="notice danger" id="code-error" role="alert" hidden></div>
         <form id="code-form" class="stack" autocomplete="off">
           <input type="text" id="code" class="code-input mono" placeholder="ABCD-2345" maxlength="12" inputmode="text" autocapitalize="characters" spellcheck="false" aria-label="Interview code">
@@ -60,6 +66,14 @@
               <li>Keep this tab open until the end</li>
             </ul>
           </div>
+        </div>
+        <div class="lang-pick">
+          <h3>Interview language</h3>
+          <div id="lang-choose">
+            <p class="small muted">Choose the language you are most comfortable speaking. The interviewer will speak and listen in it, and you can mix in English words as you normally would.</p>
+            <div class="lang-grid" id="lang-grid" role="radiogroup" aria-label="Interview language"></div>
+          </div>
+          <p class="small" id="lang-fixed" hidden></p>
         </div>
         <div class="notice warn"><strong>Recording notice.</strong> The whole session (video and audio) is recorded and your answers are assessed with the help of AI. The hiring team reviews every recording and assessment; people make the final decision.</div>
         <label class="check consent"><input type="checkbox" id="consent"><span>I understand and consent to being recorded and assessed.</span></label>

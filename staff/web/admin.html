@@ -4,17 +4,23 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Staff dashboard</title>
-  <link rel="icon" href="/static/favicon.png">
+  <meta name="theme-color" content="#04050a">
+  <title>Christ Junior College · Staff appointments</title>
+  <link rel="icon" href="/staff-static/img/favicon.png">
   <link rel="stylesheet" href="/staff-static/base.css">
   <link rel="stylesheet" href="/staff-static/admin.css">
 </head>
 <body>
   <div id="login" class="login-wrap" hidden>
+    <div class="brandbar big">
+      <img class="logo-cjc" src="/staff-static/img/cjc-logo.png" alt="Christ Junior College, Bengaluru-29" width="198" height="66">
+      <span class="sep" aria-hidden="true"></span>
+      <img class="logo-cogni" src="/staff-static/img/cogniai-logo.png" alt="CogniAI Studios" width="139" height="60">
+    </div>
     <form id="login-form" class="card login-card stack">
-      <div class="brand dark"><span class="logo-dot"></span><span id="login-org">Staff dashboard</span></div>
+      <div class="eyebrow" id="login-org">Christ Junior College</div>
       <h1>Sign in</h1>
-      <p class="muted small">Recruitment administration. Authorised staff only.</p>
+      <p class="muted small">Teaching and staff appointments &mdash; administration. Authorised staff only.</p>
       <div class="notice danger" id="login-error" role="alert" hidden></div>
       <div><label class="field" for="password">Admin password</label><input type="password" id="password" autocomplete="current-password" required></div>
       <button class="btn block" type="submit" id="login-btn">Sign in</button>
@@ -22,8 +28,21 @@
   </div>
 
   <div id="app" class="shell" hidden>
+    <header class="topbar">
+      <div class="bar-inner">
+        <div class="top-left">
+          <button class="btn secondary small menu-btn" id="menu-btn" aria-label="Menu">&#9776;</button>
+          <div class="brandbar">
+            <img class="logo-cjc" src="/staff-static/img/cjc-logo.png" alt="Christ Junior College, Bengaluru-29" width="130" height="43">
+            <span class="sep" aria-hidden="true"></span>
+            <img class="logo-cogni" src="/staff-static/img/cogniai-logo.png" alt="CogniAI Studios" width="88" height="38">
+          </div>
+        </div>
+        <div class="top-right"><span class="badge info hide-sm">Staff appointments</span><span class="tiny muted mobile-only" id="mobile-title"></span></div>
+      </div>
+    </header>
     <aside class="side" id="side">
-      <div class="brand"><span class="logo-dot"></span><span id="org">Staff</span></div>
+      <div class="side-org"><span class="live-dot" aria-hidden="true"></span><span id="org">Christ Junior College</span></div>
       <nav class="nav" id="nav">
         <a href="#/overview" data-route="overview">Overview</a>
         <a href="#/positions" data-route="positions">Positions</a>
@@ -38,7 +57,6 @@
       </div>
     </aside>
     <div class="main">
-      <header class="mobile-bar"><button class="btn secondary small" id="menu-btn" aria-label="Menu">&#9776;</button><strong id="mobile-title">Staff</strong></header>
       <main id="view" class="view" tabindex="-1"></main>
     </div>
   </div>

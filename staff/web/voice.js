@@ -1,9 +1,9 @@
 // Hands-free voice I/O for the interview room.
 //
-//  * SpeechOut  - natural server TTS (Gemini) played through WebAudio so it is mixed into the recording,
+//  * SpeechOut  - natural server TTS (Rexy Voice) played through WebAudio so it is mixed into the recording,
 //                 with automatic fallback to the browser's speechSynthesis (sentence-chunked, voice-ranked).
 //  * SpeechIn   - voice-activity detection decides when the candidate has finished; Web Speech API gives
-//                 live captions; the audio segment is re-transcribed by Gemini when the browser engine
+//                 live captions; the audio segment is re-transcribed by the Rexy model when the browser engine
 //                 fails, is unsupported (Firefox) or returned too little for the amount of speech.
 //
 // The interview is strictly half-duplex: the mic is not "listening" while the interviewer speaks, which is
@@ -15,7 +15,7 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export function splitSentences(text, maxLen = 200) {
   const clean = String(text || '').replace(/\s+/g, ' ').trim();
   if (!clean) return [];
-  const raw = clean.match(/[^.!?…]+(?:[.!?…]+["')\]]*|$)/g) || [clean];
+  const raw = clean.match(/[^.!?…।॥]+(?:[.!?…।॥]+["')\]]*|$)/g) || [clean];     // । ॥ end Hindi sentences
   const out = [];
   for (let part of raw) {
     part = part.trim();
@@ -174,6 +174,8 @@ export class SpeechOut extends EventTarget {
     }
   }
 
+  setLang(lang) { if (lang && lang !== this.lang) { this.lang = lang; this._voice = undefined; } }   // re-rank browser voices
+
   stop() {
     this.cancelled = true;
     try { this._src?.stop(); } catch { /* already ended */ }
@@ -287,6 +289,7 @@ export class SpeechIn extends EventTarget {
     this.vad.start();
   }
 
+  setLang(lang) { if (lang) this.lang = lang; }       // read each time a listening turn starts
   get usingBrowserEngine() { return !this.srBroken; }
   get level() { return this.vad.level; }
   forceDone() { this._force?.('forced'); }

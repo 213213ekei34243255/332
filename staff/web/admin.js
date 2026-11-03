@@ -1,6 +1,6 @@
 import { $, $$, h, mount, request, toast, fmtDate, fmtDuration, ago, ApiError, sleep } from './ui.js';
 
-const A = { csrf: null, org: 'Staff', system: null, positions: [], poll: null };
+const A = { csrf: null, org: 'Christ Junior College', system: null, positions: [], poll: null };
 const call = (path, opts = {}) => request(`/staff/api/${path}`, { csrf: A.csrf, ...opts });
 const view = $('#view');
 
@@ -12,6 +12,9 @@ const ENR_STATUS = { issued: ['Code sent', 'info'], opened: ['Code opened', 'inf
 const IV_STATUS = { in_progress: ['In progress', 'warn'], evaluating: ['AI evaluating…', 'info'], evaluated: ['Evaluated', 'ok'], evaluation_failed: ['Evaluation failed', 'danger'] };
 const DECISION = { shortlisted: ['Shortlisted', 'ok'], on_hold: ['On hold', 'warn'], rejected: ['Rejected', 'danger'], hired: ['Hired', 'ok'] };
 const RECO = { strong_yes: ['Strong yes', 'ok'], yes: ['Yes', 'ok'], maybe: ['Maybe', 'warn'], no: ['No', 'danger'], strong_no: ['Strong no', 'danger'], no_data: ['Not enough data', ''] };
+const MODEL_ROLE = { turn: 'Interviewer', eval: 'Evaluator', stt: 'Listening', tts: 'Voice', vision: 'Face check' };
+const LANGS = [['English', 'English'], ['Malayalam', 'Malayalam · മലയാളം'], ['Kannada', 'Kannada · ಕನ್ನಡ'], ['Tamil', 'Tamil · தமிழ்'], ['Telugu', 'Telugu · తెలుగు'], ['Hindi', 'Hindi · हिन्दी']];
+const STAFF_TYPES = [['', 'Not specified'], ['Teaching staff', 'Teaching staff'], ['Non-teaching staff', 'Non-teaching staff'], ['Administrative', 'Administrative'], ['Support staff', 'Support staff']];
 const EDU = { '': 'Any', high_school: 'High school', diploma: 'Diploma', bachelor: "Bachelor's", master: "Master's", doctorate: 'Doctorate' };
 
 const badge = (map, key, fallback = '—') => (map[key] ? h('span', { class: `badge ${map[key][1]}` }, map[key][0]) : h('span', { class: 'badge' }, key || fallback));
@@ -89,12 +92,12 @@ $('#menu-btn').addEventListener('click', () => $('#side').classList.toggle('open
 
 async function init() {
   const me = await request('/staff/api/me');
-  A.org = me.org || 'Staff';
+  A.org = me.org || 'Christ Junior College';
   if (!me.configured) { showLogin('Admin access is not configured. Set STAFF_ADMIN_PASSWORD (or ADMIN_API_KEY) on the server.'); return; }
   if (me.signed_in) { A.csrf = me.csrf; boot(); } else showLogin();
 }
 function boot() {
-  $('#login').hidden = true; $('#app').hidden = false; $('#org').textContent = A.org; document.title = `${A.org} · Staff dashboard`;
+  $('#login').hidden = true; $('#app').hidden = false; $('#org').textContent = A.org; document.title = `${A.org} · Staff appointments`;
   window.addEventListener('hashchange', route);
   route();
 }
@@ -137,14 +140,14 @@ async function viewOverview() {
   const card = (n, label, hash) => h('a', { class: 'card stat', href: hash || '#', style: null }, h('b', null, n), h('span', null, label));
   const health = [
     ['Admin sign-in', true, 'configured'],
-    ['Gemini AI', system.ai.configured, system.ai.mock ? 'MOCK mode (no real AI)' : system.ai.configured ? `models: ${Object.values(system.ai.models).filter(Boolean).slice(0, 2).join(', ') || 'auto'}` : 'GEMINI_API_KEY missing'],
+    ['Rexy model', system.ai.configured, system.ai.mock ? 'Test mode (no real AI)' : system.ai.configured ? `ready · ${[...new Set(Object.values(system.ai.models).filter(Boolean))].join(', ') || 'auto'}` : 'REXY_API_KEY missing'],
     ['Google SMTP', system.smtp.configured || system.smtp.dry_run, system.smtp.dry_run ? 'DRY RUN (emails not sent)' : system.smtp.configured ? `${system.smtp.user} via ${system.smtp.host}:${system.smtp.port}` : 'SMTP_USER / SMTP_PASSWORD missing'],
     ['Video storage', system.storage.free_mb < 0 || system.storage.free_mb > 500, `${system.storage.used_mb} MB used · ${system.storage.free_mb} MB free`],
     ['Data persistence', !(system.persistence?.warnings || []).length, (system.persistence?.warnings || []).length ? 'Temporary disk: data is erased on every deploy or restart' : `${system.database} database on a persistent volume`],
   ];
   const warnings = system.persistence?.warnings || [];
   mount(view,
-    h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Overview'), h('p', { class: 'muted' }, 'Recruitment pipeline at a glance.'))),
+    h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Overview'), h('p', { class: 'muted' }, 'Teaching and staff appointments at a glance.'))),
     warnings.length ? h('div', { class: 'notice danger' }, h('strong', null, 'Your recruitment data is not safe. '), warnings.map((w) => h('div', null, w))) : null,
     h('div', { class: 'grid four' },
       card(stats.positions_open, 'Open positions', '#/positions'), card(stats.awaiting_invite, 'Awaiting invite', '#/applications'),
@@ -168,7 +171,7 @@ async function viewOverview() {
 async function viewPositions() {
   const items = await loadPositions();
   const base = location.origin;
-  mount(view, h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Positions'), h('p', { class: 'muted' }, 'Roles applicants can apply for, with eligibility rules and AI interview questions.')),
+  mount(view, h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'Positions'), h('p', { class: 'muted' }, 'Teaching and staff posts applicants can apply for, with eligibility rules and AI interview topics.')),
     h('a', { class: 'btn', href: '#/positions/new' }, '+ New position')),
     h('div', { class: 'card table-wrap' }, items.length ? h('table', { class: 'tbl' },
       h('thead', null, h('tr', null, ['Position', 'Status', 'Applications', 'Interview', ''].map((x) => h('th', null, x)))),
@@ -185,7 +188,7 @@ async function viewPositions() {
 const blankPosition = () => ({ title: '', department: '', location: '', employment_type: 'Full-time', description: '', status: 'open', config: {
   required_skills: [], nice_to_have: [], seniority: '', eligibility: { min_experience_years: 0, min_education: '', must_have_skills: [], notes: '' }, objectives: '',
   questions: [{ text: '', intent: '', required: true, weight: 3, rubric: '' }], criteria: [{ label: '', description: '', weight: 3 }],
-  interview: { duration_minutes: 15, language: 'English', speech_lang: 'en-IN', tone: 'friendly-professional', difficulty: 'standard', persona_name: 'Noah', allow_typing: true }, auto_invite: false } });
+  interview: { duration_minutes: 15, language: 'English', allow_language_choice: true, tone: 'friendly-professional', difficulty: 'standard', persona_name: 'Noah', allow_typing: true }, staff_type: '', auto_invite: false } });
 
 async function viewPositionEditor(id) {
   const p = id ? (await call(`positions/${id}`)).position : blankPosition();
@@ -239,7 +242,7 @@ async function viewPositionEditor(id) {
     h('div', { class: 'page-head' }, h('div', null, h('h1', null, id ? 'Edit position' : 'New position'), h('p', { class: 'muted' }, 'Applicants see the basics and requirements; the interview topics and scoring stay private.')),
       h('div', { class: 'row' }, id && h('button', { class: 'btn secondary danger-text', onclick: guard(async () => { if (await confirmDialog('Delete position?', 'If it has applications it will be closed instead of deleted.', 'Delete')) { const r = await call(`positions/${id}`, { method: 'DELETE' }); toast(r.deleted ? 'Deleted' : 'Closed (has applications)', 'ok'); location.hash = '#/positions'; } }) }, 'Delete'), h('a', { class: 'btn secondary', href: '#/positions' }, 'Cancel'), h('button', { class: 'btn', id: 'save-btn', onclick: save }, 'Save position'))),
     h('div', { class: 'card stack' }, h('h3', null, 'Basics'),
-      h('div', { class: 'grid two' }, field('Title *', text(p, 'title', { maxlength: 120 })), field('Department', text(p, 'department')), field('Location', text(p, 'location')),
+      h('div', { class: 'grid two' }, field('Title *', text(p, 'title', { maxlength: 120 })), field('Staff category', sel(c, 'staff_type', STAFF_TYPES)), field('Department', text(p, 'department', { placeholder: 'e.g. Science, Commerce, Administration' })), field('Location', text(p, 'location')),
         field('Employment type', sel(p, 'employment_type', ['Full-time', 'Part-time', 'Contract', 'Internship'].map((x) => [x, x]))), field('Seniority', text(c, 'seniority', { placeholder: 'e.g. Senior' })),
         field('Status', sel(p, 'status', [['open', 'Open for applications'], ['closed', 'Closed']]))),
       field('Description', area(p, 'description', 5, { maxlength: 6000 })),
@@ -256,8 +259,8 @@ async function viewPositionEditor(id) {
     h('div', { class: 'card stack' }, h('h3', null, 'Interview settings'),
       h('div', { class: 'grid three' }, field('Target length (minutes)', num(c.interview, 'duration_minutes', { min: 5, max: 45 })), field('Interviewer name', text(c.interview, 'persona_name')),
         field('Tone', sel(c.interview, 'tone', [['friendly-professional', 'Friendly & professional'], ['formal', 'Formal'], ['casual', 'Casual']])),
-        field('Difficulty', sel(c.interview, 'difficulty', [['easy', 'Easy'], ['standard', 'Standard'], ['challenging', 'Challenging']])), field('Interview language', text(c.interview, 'language')),
-        field('Speech recognition locale', text(c.interview, 'speech_lang', { placeholder: 'en-IN' }), 'BCP-47 code, e.g. en-IN, en-US, en-GB')),
+        field('Difficulty', sel(c.interview, 'difficulty', [['easy', 'Easy'], ['standard', 'Standard'], ['challenging', 'Challenging']])), field('Default interview language', sel(c.interview, 'language', LANGS), 'The interviewer speaks and listens in this language.')),
+      check(c.interview, 'allow_language_choice', 'Let each applicant choose their own language: English, Malayalam, Kannada, Tamil, Telugu or Hindi'),
       check(c.interview, 'allow_typing', 'Let applicants type an answer when speaking is difficult')));
 }
 
@@ -471,7 +474,7 @@ async function viewInterview(id) {
     $$('.tabs button', view).forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
   }
   mount(view,
-    h('div', { class: 'page-head' }, h('div', null, link('#/interviews', '← Interviews & videos'), h('h1', null, a.full_name), h('p', { class: 'muted' }, `${iv.position.title} · ${fmtDate(iv.started_at)} · code ${iv.enrollment?.code || ''}`)),
+    h('div', { class: 'page-head' }, h('div', null, link('#/interviews', '← Interviews & videos'), h('h1', null, a.full_name), h('p', { class: 'muted' }, `${iv.position.title} · ${fmtDate(iv.started_at)} · ${iv.language || 'English'} · code ${iv.enrollment?.code || ''}`)),
       h('div', { class: 'stack', style: null }, h('div', { class: 'row wrap' }, badge(IV_STATUS, iv.status), a.decision && badge(DECISION, a.decision)), decisionBar)),
     h('div', { class: 'iv-layout' }, h('div', { class: 'stack' }, player, h('div', { class: 'card' }, h('h4', null, 'Interview checks'), h('div', { class: 'row wrap' }, h('span', { class: `badge ${iv.enrollment?.face_verified_at ? 'ok' : 'danger'}` }, iv.enrollment?.face_verified_at ? 'Face verified' : 'Face not verified'),
       h('span', { class: `badge ${recs.length ? 'ok' : 'warn'}` }, recs.length ? 'Video stored' : 'No video'), h('span', { class: `badge ${iv.events.length ? 'warn' : 'ok'}` }, iv.events.length ? `${iv.events.length} session signal(s)` : 'No session signals')))),
@@ -496,9 +499,9 @@ async function viewSystem() {
   const aiOut = h('div', { class: 'small muted' });
   mount(view, h('div', { class: 'page-head' }, h('div', null, h('h1', null, 'System'), h('p', { class: 'muted' }, 'Configuration and diagnostics. Secrets are read from environment variables and are never shown here.'))),
     h('div', { class: 'grid two' },
-      h('div', { class: 'card stack' }, h('h3', null, 'Gemini AI'), h('div', { class: 'row' }, h('span', { class: `badge ${s.ai.configured ? 'ok' : 'danger'}` }, s.ai.mock ? 'Mock' : s.ai.configured ? 'Configured' : 'Missing GEMINI_API_KEY')),
-        s.ai.configured && h('dl', { class: 'kv' }, Object.entries(s.ai.models).map(([k, v]) => [h('dt', null, k), h('dd', { class: 'mono small' }, v || 'auto')])), s.ai.last_error && h('div', { class: 'notice warn' }, s.ai.last_error),
-        h('div', null, h('button', { class: 'btn secondary small', onclick: guard(async () => { aiOut.textContent = 'Testing…'; try { const r = await call('system/test-ai', { method: 'POST', timeout: 90000 }); aiOut.textContent = `OK — ${r.model} replied in ${r.latency_ms} ms`; } catch (e) { aiOut.textContent = `Failed: ${e.message}`; } }) }, 'Test Gemini'), aiOut)),
+      h('div', { class: 'card stack' }, h('h3', null, 'Rexy model'), h('div', { class: 'row' }, h('span', { class: `badge ${s.ai.configured ? 'ok' : 'danger'}` }, s.ai.mock ? 'Test mode' : s.ai.configured ? 'Configured' : 'Missing REXY_API_KEY')),
+        s.ai.configured && h('dl', { class: 'kv' }, Object.entries(s.ai.models).map(([k, v]) => [h('dt', null, MODEL_ROLE[k] || k), h('dd', { class: 'small' }, v || 'auto')])), s.ai.last_error && h('div', { class: 'notice warn' }, s.ai.last_error),
+        h('div', null, h('button', { class: 'btn secondary small', onclick: guard(async () => { aiOut.textContent = 'Testing…'; try { const r = await call('system/test-ai', { method: 'POST', timeout: 90000 }); aiOut.textContent = `OK — ${r.model} replied in ${r.latency_ms} ms`; } catch (e) { aiOut.textContent = `Failed: ${e.message}`; } }) }, 'Test Rexy'), aiOut)),
       h('div', { class: 'card stack' }, h('h3', null, 'Google SMTP'), h('div', { class: 'row' }, h('span', { class: `badge ${s.smtp.configured ? 'ok' : s.smtp.dry_run ? 'warn' : 'danger'}` }, s.smtp.dry_run ? 'Dry run (not sending)' : s.smtp.configured ? 'Configured' : 'Not configured')),
         h('dl', { class: 'kv' }, [['Host', `${s.smtp.host}:${s.smtp.port}`], ['Account', s.smtp.user || '—'], ['From name', s.smtp.from_name]].map(([k, v]) => [h('dt', null, k), h('dd', null, v)])),
         !s.smtp.configured && !s.smtp.dry_run && h('div', { class: 'notice warn' }, 'Set SMTP_USER (full Gmail address) and SMTP_PASSWORD (a 16-character Google App Password) in the server environment.'),

@@ -5,6 +5,7 @@ from functools import wraps
 
 from flask import Blueprint, Response, current_app, g, jsonify, request
 
+from . import languages
 from .config import get_settings
 from .gemini import AIError
 from .security import (clean_str, client_ip, json_error, limiter, rate_limited, verify_token)
@@ -91,7 +92,10 @@ def lookup():
         "applicant": {"first_name": app["full_name"].split()[0], "full_name": app["full_name"]},
         "position": {"title": pos["title"], "department": pos.get("department")},
         "interview": {"duration_minutes": cfg.get("duration_minutes", 15), "persona": cfg.get("persona_name", "Noah"),
-                      "speech_lang": cfg.get("speech_lang", "en-IN"), "allow_typing": cfg.get("allow_typing", True),
+                      "speech_lang": languages.info(cfg.get("language"))["speech"], "allow_typing": cfg.get("allow_typing", True),
+                      "language": languages.resolve(cfg.get("language")),
+                      "allow_language_choice": bool(cfg.get("allow_language_choice", True)),
+                      "languages": languages.public_list(),
                       "tts": bool(s.tts_enabled and svc().ai.configured)},
         "stage": "interview" if en["face_verified_at"] else "face",
         "expires_at": en["expires_at"]})
@@ -125,8 +129,10 @@ def face_submit():
 @enrollment_required()
 @rate_limited("iv-start", 20, 600)
 def interview_start():
+    requested = clean_str((request.get_json(silent=True) or {}).get("language"), 20)
     try:
-        payload = svc().start_interview(g.enrollment, g.application, g.position)
+        payload = svc().start_interview(g.enrollment, g.application, g.position,
+                                        language=requested if languages.is_known(requested) else None)
     except AIError as exc:
         return json_error("The AI interviewer is unavailable right now. Please try again in a minute.", exc.status)
     return jsonify(dict(payload, ok=True))
@@ -159,8 +165,10 @@ def interview_transcribe():
         return jsonify({"ok": True, "text": ""})
     pos = g.position
     terms = ", ".join([pos["title"]] + ((pos.get("config") or {}).get("required_skills") or [])[:12])
+    iv = svc()._interview_for(g.enrollment)
+    spoken = ((iv or {}).get("state") or {}).get("settings", {}).get("language_code")
     try:
-        text = svc().ai.transcribe(audio, request.content_type or "audio/webm", terms)
+        text = svc().ai.transcribe(audio, request.content_type or "audio/webm", terms, spoken)
     except AIError as exc:
         return json_error("Transcription is unavailable.", exc.status)
     return jsonify({"ok": True, "text": text})

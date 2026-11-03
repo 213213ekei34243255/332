@@ -35,11 +35,40 @@ PREFERENCES = {
 _EXCLUDED = re.compile(r"tts|image|live|embed|robotics|computer|native|audio|transcribe|omni|banana|veo|imagen")
 
 
+_VENDOR_ID = re.compile(r"\b(the\s+)?(?:models/)?gemini(?:[\w\-]|\.(?=\d))*", re.I)
+
+
+def scrub(text):
+    """Staff-facing text never names the underlying vendor: it is the 'Rexy model' everywhere a person can see it."""
+    text = str(text or "")
+    # "the Gemini API" -> "the Rexy model API"; a bare "Gemini" or model id -> "the Rexy model"
+    out = _VENDOR_ID.sub(lambda m: ("The" if (m.group(1) or "")[:1] == "T" else "the") + " Rexy model", text)
+    if re.match(r"\s*(?:models/)?gemini", text, re.I):                                 # keep sentence-initial capital
+        out = out[:1].upper() + out[1:]
+    return out
+
+
+def display_model(name):
+    """Friendly label for a resolved model id, e.g. 'Rexy Fast' / 'Rexy Pro' / 'Rexy Voice'."""
+    n = (name or "").lower()
+    if not n or n == "mock":
+        return "Rexy" if not n else "Rexy (test mode)"
+    if "tts" in n:
+        return "Rexy Voice"
+    if "pro" in n:
+        return "Rexy Pro"
+    if "lite" in n:
+        return "Rexy Lite"
+    if "flash" in n:
+        return "Rexy Fast"
+    return "Rexy"
+
+
 class AIError(Exception):
-    """Raised when Gemini cannot produce a usable answer."""
+    """Raised when the Rexy model cannot produce a usable answer."""
 
     def __init__(self, message, status=503):
-        super().__init__(message)
+        super().__init__(scrub(message))
         self.status = status
 
 
@@ -149,6 +178,10 @@ class GeminiService:
         """Used by the admin 'system' panel."""
         return {role: (self.candidates(role)[:1] or [""])[0] for role in PREFERENCES}
 
+    def public_models(self):
+        """The same map with vendor model ids replaced by Rexy labels (safe to show in the dashboard)."""
+        return {role: display_model(m) for role, m in self.resolved_models().items()}
+
     # ---- config helpers ---------------------------------------------------
     def _thinking(self, model, level):
         from google.genai import types
@@ -177,14 +210,14 @@ class GeminiService:
         A per-role time budget keeps a live interview turn from hanging behind many retries."""
         from google.genai import errors
         if not self.configured:
-            raise AIError("The AI service is not configured (GEMINI_API_KEY is missing).")
+            raise AIError("The Rexy model is not configured (REXY_API_KEY is missing).")
         last = None
         deadline = time.time() + self.BUDGET_SECONDS.get(role, 50)
         for model in self.candidates(role):
             attempt = 0
             while attempt <= retries:
                 if time.time() > deadline:
-                    self.last_error = "Gemini took too long to respond."
+                    self.last_error = "The Rexy model took too long to respond."
                     raise AIError(self.last_error, 503)
                 try:
                     resp = self.client.models.generate_content(
@@ -196,7 +229,7 @@ class GeminiService:
                     code = getattr(exc, "code", 0) or 0
                     msg = str(exc).lower()
                     if code in (401, 403):
-                        self.last_error = "Gemini rejected the API key or the model is not permitted for it."
+                        self.last_error = "The Rexy model rejected the API key or is not permitted for it."
                         raise AIError(self.last_error, 503)
                     if code == 404 or "not found" in msg or "no longer available" in msg:
                         self._bad.add((role, model))
@@ -214,7 +247,7 @@ class GeminiService:
                             attempt += 1
                             continue
                         break  # next model
-                    self.last_error = f"Gemini request rejected ({code})."
+                    self.last_error = f"The Rexy model rejected the request ({code})."
                     raise AIError(self.last_error, 502)
                 except Exception as exc:  # network, timeout, SDK problems
                     last = exc
@@ -223,7 +256,7 @@ class GeminiService:
                         attempt += 1
                         continue
                     break
-        self.last_error = f"Gemini is unavailable right now ({type(last).__name__ if last else 'no model'})."
+        self.last_error = f"The Rexy model is unavailable right now ({type(last).__name__ if last else 'no model'})."
         raise AIError(self.last_error, 503)
 
     # ---- structured JSON --------------------------------------------------
@@ -258,15 +291,21 @@ class GeminiService:
         raise AIError("The AI returned an unreadable response.", 502)
 
     # ---- speech to text ---------------------------------------------------
-    def transcribe(self, audio, mime, hint_terms=""):
+    def transcribe(self, audio, mime, hint_terms="", language=None):
         from google.genai import types
+        from . import languages
         mime = (mime or "audio/webm").split(";")[0].strip().lower()
         if mime not in ("audio/webm", "audio/wav", "audio/x-wav", "audio/mp4", "audio/mpeg",
                         "audio/mp3", "audio/ogg", "audio/aac", "audio/flac", "audio/m4a"):
             mime = "audio/webm"
+        lang = languages.info(language) if language else None
+        lang_hint = ""
+        if lang and lang["code"] != "en":
+            lang_hint = (f" The speaker is most likely speaking {lang['name']} ({lang['native']}), possibly mixed with "
+                         f"English words. Write {lang['name']} in its own script, and keep English words in English letters.")
         prompt = ("Transcribe the speech in this audio exactly as spoken, in the original language. "
                   "Output only the transcript text, with natural punctuation. Do not summarise, translate, "
-                  "or add commentary. If there is no intelligible speech, output nothing."
+                  "or add commentary. If there is no intelligible speech, output nothing." + lang_hint
                   + (f" Domain vocabulary that may appear: {hint_terms}." if hint_terms else ""))
 
         def build(model):
@@ -335,11 +374,12 @@ class GeminiService:
         started = time.time()
         self.structured("turn", "Reply with the JSON object {\"ok\": true}.", "ping", Ping, temperature=0,
                         thinking="low", max_tokens=50)
-        return {"ok": True, "latency_ms": int((time.time() - started) * 1000), "model": self.resolved_models()["turn"]}
+        return {"ok": True, "latency_ms": int((time.time() - started) * 1000),
+                "model": display_model(self.resolved_models()["turn"])}
 
     def status(self):
-        return {"configured": self.configured, "models": self.resolved_models() if self.configured else {},
-                "last_error": self.last_error}
+        return {"configured": self.configured, "models": self.public_models() if self.configured else {},
+                "last_error": scrub(self.last_error)}
 
 
 # ===================================================================== mock
@@ -352,11 +392,14 @@ class MockAI:
     def resolved_models(self):
         return {k: "mock" for k in PREFERENCES}
 
+    def public_models(self):
+        return {k: display_model("mock") for k in PREFERENCES}
+
     def ping(self):
-        return {"ok": True, "latency_ms": 1, "model": "mock"}
+        return {"ok": True, "latency_ms": 1, "model": display_model("mock")}
 
     def status(self):
-        return {"configured": True, "models": self.resolved_models(), "last_error": "", "mock": True}
+        return {"configured": True, "models": self.public_models(), "last_error": "", "mock": True}
 
     def structured(self, role, system, user, schema, *, hint=None, parts=None, **kw):
         from . import schemas as sc
@@ -376,7 +419,13 @@ class MockAI:
             end = bool(hint.get("force_end")) or turn_no >= hint.get("max_turns", 6) or (not pending and turn_no >= 3)
             topic_id = pending[0] if pending else (hint.get("all_topics") or ["bg"])[0]
             updates = [sc.TopicUpdate(topic_id=topic_id, status="covered", depth=2)] if turn_no and not end else []
-            if end:
+            code = hint.get("language_code") or "en"
+            if code != "en":                         # dev mode: speak the fixed lines in the chosen language
+                from . import languages
+                reply = (languages.line(code, "closing", name="") if end else
+                         languages.line(code, "opening", name="", persona="Noah") if turn_no == 0 else
+                         languages.line(code, "fallback"))
+            elif end:
                 reply = "Thank you for your time. The hiring team will review the recording and be in touch."
             elif turn_no == 0:
                 reply = "Hi, I'm Noah, an AI interviewer. To start, could you tell me a little about yourself?"
@@ -404,7 +453,10 @@ class MockAI:
                 objectives="Assess fit.")
         raise AIError(f"mock has no handler for {name}")
 
-    def transcribe(self, audio, mime, hint_terms=""):
+    def transcribe(self, audio, mime, hint_terms="", language=None):
+        from . import languages
+        if language and languages.resolve(language) != "en":
+            return languages.line(language, "fallback")           # native-script text so dev mode exercises Indic end to end
         return "this is a mock transcript"
 
     def tts(self, text, voice=None):

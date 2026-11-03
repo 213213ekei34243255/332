@@ -18,14 +18,14 @@ function requirementsText(p) {
 }
 
 function roleCard(p) {
-  const meta = [p.department, p.location, p.employment_type, p.seniority].filter(Boolean);
+  const meta = [p.staff_type, p.department, p.location, p.employment_type, p.seniority].filter(Boolean);
   return h('article', { class: 'card role' },
     h('h3', null, p.title),
     h('div', { class: 'meta' }, meta.map((m) => h('span', { class: 'badge' }, m))),
     p.description && h('p', { class: 'desc' }, p.description),
     p.required_skills?.length ? h('div', { class: 'chips' }, p.required_skills.slice(0, 6).map((s) => h('span', { class: 'chip' }, s))) : null,
     h('div', { class: 'row between' },
-      h('span', { class: 'tiny muted' }, `~${p.duration_minutes} min AI interview`),
+      h('span', { class: 'tiny muted' }, `~${p.duration_minutes} min AI interview · 6 languages`),
       h('button', { class: 'btn small', type: 'button', onclick: () => openForm(p.id) }, 'Apply')));
 }
 
@@ -57,9 +57,9 @@ async function load() {
   try {
     const data = await request('/api/recruit/positions');
     positions = data.positions;
-    if (data.org) { els.org.textContent = data.org; document.title = `Careers at ${data.org}`; }
+    if (data.org) { els.org.textContent = data.org; document.title = `Apply — ${data.org}`; }
     if (!positions.length) {
-      mount(els.list, h('div', { class: 'card center muted' }, 'There are no open positions right now. Please check back soon.'));
+      mount(els.list, h('div', { class: 'card center muted' }, 'There are no open appointments right now. Please check back soon.'));
       return;
     }
     mount(els.list, positions.map(roleCard));

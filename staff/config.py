@@ -1,6 +1,6 @@
 """Environment-driven settings for the staff recruitment system.
 
-Everything secret (Gemini key, SMTP password, admin password) comes from
+Everything secret (Rexy model key, SMTP password, admin password) comes from
 environment variables -- on Render these are the "Environment" tab values.
 """
 import hashlib
@@ -87,14 +87,15 @@ class Settings:
             seed = "staff-secret:" + (self.admin_password or "unconfigured")
             self.secret_key = hashlib.sha256(seed.encode()).hexdigest()
 
-        # ---- Gemini --------------------------------------------------
-        self.gemini_api_key = _env("GEMINI_API_KEY", "GOOGLE_API_KEY")
-        self.gemini_base_url = _env("GEMINI_BASE_URL")  # optional proxy / test double
+        # ---- Rexy model ------------------------------------------------
+        # REXY_* is the documented name; the older variable names keep working so no deploy breaks.
+        self.gemini_api_key = _env("REXY_API_KEY", "GEMINI_API_KEY", "GOOGLE_API_KEY")
+        self.gemini_base_url = _env("REXY_BASE_URL", "GEMINI_BASE_URL")  # optional proxy / test double
         self.ai_mock = _flag("STAFF_AI_MOCK")
-        self.model_turn = _env("STAFF_MODEL_TURN", "GEMINI_MODEL_TURN")
-        self.model_eval = _env("STAFF_MODEL_EVAL", "GEMINI_MODEL_EVAL")
-        self.model_tts = _env("STAFF_MODEL_TTS", "GEMINI_MODEL_TTS")
-        self.model_stt = _env("STAFF_MODEL_STT", "GEMINI_MODEL_STT")
+        self.model_turn = _env("STAFF_MODEL_TURN", "REXY_MODEL_TURN", "GEMINI_MODEL_TURN")
+        self.model_eval = _env("STAFF_MODEL_EVAL", "REXY_MODEL_EVAL", "GEMINI_MODEL_EVAL")
+        self.model_tts = _env("STAFF_MODEL_TTS", "REXY_MODEL_TTS", "GEMINI_MODEL_TTS")
+        self.model_stt = _env("STAFF_MODEL_STT", "REXY_MODEL_STT", "GEMINI_MODEL_STT")
         self.tts_enabled = _flag("STAFF_TTS_ENABLED", default=True)
         self.tts_voice = _env("STAFF_TTS_VOICE", default="Kore")
 
@@ -106,12 +107,12 @@ class Settings:
         self.smtp_password = "".join(
             _env("SMTP_PASSWORD", "SMTP_PASS", "SMTP_APP_PASSWORD").split()
         )
-        self.smtp_from_name = _env("SMTP_FROM_NAME", default="Abraham Industries Recruitment")
+        self.smtp_from_name = _env("SMTP_FROM_NAME", default="Christ Junior College Recruitment")
         self.smtp_from_email = _env("SMTP_FROM_EMAIL", default=self.smtp_user)
         self.email_dry_run = _flag("STAFF_EMAIL_DRY_RUN")
 
         # ---- branding / links -----------------------------------------
-        self.org_name = _env("STAFF_ORG_NAME", default="Abraham Industries")
+        self.org_name = _env("STAFF_ORG_NAME", default="Christ Junior College")
         self.support_email = _env("STAFF_SUPPORT_EMAIL", default=self.smtp_user)
         self.notify_email = _env("STAFF_NOTIFY_EMAIL")
         self.public_url = _env("STAFF_PUBLIC_URL", "RENDER_EXTERNAL_URL").rstrip("/")

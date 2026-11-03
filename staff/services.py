@@ -11,7 +11,7 @@ import time
 import zipfile
 from datetime import datetime, timezone
 
-from . import mailer
+from . import languages, mailer
 from .db import jdump, new_id, now_ms
 from .engine import CANDIDATE_ANSWER_KINDS, InterviewEngine
 from .gemini import AIError
@@ -25,6 +25,7 @@ EDU_RANK = {"": 0, "any": 0, "high_school": 1, "diploma": 2, "bachelor": 3, "mas
 EDU_LABEL = {"high_school": "High school", "diploma": "Diploma", "bachelor": "Bachelor's degree",
              "master": "Master's degree", "doctorate": "Doctorate"}
 EMPLOYMENT_TYPES = ("Full-time", "Part-time", "Contract", "Internship")
+STAFF_TYPES = ("Teaching staff", "Non-teaching staff", "Administrative", "Support staff")
 ACTIVE_ENROLLMENT = ("issued", "opened", "verified", "in_progress")
 
 
@@ -81,19 +82,22 @@ class Services:
         iv = data.get("interview") or {}
         tone = clean_str(iv.get("tone"), 30)
         difficulty = clean_str(iv.get("difficulty"), 30)
+        lang = languages.settings_for(iv.get("language") or iv.get("speech_lang"))
         interview = {
             "duration_minutes": int(clean_number(iv.get("duration_minutes"), 5, 45, 15)),
-            "language": clean_str(iv.get("language"), 30) or "English",
+            "language": lang["language"],
+            "allow_language_choice": bool(iv.get("allow_language_choice", True)),
             "tone": tone if tone in ("friendly-professional", "formal", "casual") else "friendly-professional",
             "difficulty": difficulty if difficulty in ("standard", "challenging", "easy") else "standard",
             "persona_name": clean_str(iv.get("persona_name"), 30) or "Noah",
-            "speech_lang": clean_str(iv.get("speech_lang"), 12) or "en-IN",
+            "speech_lang": lang["speech_lang"],
             "allow_typing": bool(iv.get("allow_typing", True)),
         }
         config = {
             "required_skills": clean_list(data.get("required_skills")),
             "nice_to_have": clean_list(data.get("nice_to_have")),
             "seniority": clean_str(data.get("seniority"), 40),
+            "staff_type": clean_str(data.get("staff_type"), 30) if clean_str(data.get("staff_type"), 30) in STAFF_TYPES else "",
             "eligibility": {
                 "min_experience_years": clean_number(elig_in.get("min_experience_years"), 0, 50, 0),
                 "min_education": min_edu,
@@ -155,7 +159,8 @@ class Services:
         e = c.get("eligibility") or {}
         return {"id": p["id"], "title": p["title"], "department": p.get("department"), "location": p.get("location"),
                 "employment_type": p.get("employment_type"), "description": p.get("description"),
-                "seniority": c.get("seniority"), "required_skills": c.get("required_skills", []),
+                "seniority": c.get("seniority"), "staff_type": c.get("staff_type", ""),
+                "required_skills": c.get("required_skills", []),
                 "nice_to_have": c.get("nice_to_have", []),
                 "requirements": {"min_experience_years": e.get("min_experience_years", 0),
                                  "min_education": e.get("min_education", ""),
@@ -563,7 +568,7 @@ class Services:
         return self.db.one("SELECT * FROM interviews WHERE enrollment_id = ? ORDER BY created_at DESC",
                            (enrollment["id"],), "interviews")
 
-    def start_interview(self, enrollment, application, position):
+    def start_interview(self, enrollment, application, position, language=None):
         if not enrollment.get("face_verified_at"):
             raise ServiceError("Face verification must be completed before the interview.", 403)
         iv = self._interview_for(enrollment)
@@ -579,7 +584,9 @@ class Services:
             return self._start_payload(iv, turns, position, resumed=True, segment=segment)
         if not self.ai.configured:
             raise ServiceError("The AI interviewer is not available right now. Please try again shortly.", 503)
-        state, opening = self.engine.start(position, application)
+        cfg = (position.get("config") or {}).get("interview") or {}
+        chosen = languages.choose(cfg.get("language"), language, cfg.get("allow_language_choice", True))
+        state, opening = self.engine.start(position, application, chosen)
         iv_id, now = new_id("int"), now_ms()
         self.db.insert("interviews", {
             "id": iv_id, "enrollment_id": enrollment["id"], "application_id": application["id"],
@@ -595,11 +602,14 @@ class Services:
     def _start_payload(self, iv, turns, position, resumed, segment):
         cfg = (position.get("config") or {}).get("interview") or {}
         st = iv["state"] or {}
+        lang = languages.settings_for((st.get("settings") or {}).get("language_code") or cfg.get("language"))
         return {"interview_id": iv["id"], "resumed": resumed, "segment": segment,
                 "turns": [{"idx": t["idx"], "role": t["role"], "text": t["body"]} for t in turns],
                 "last_ai_text": next((t["body"] for t in reversed(turns) if t["role"] == "ai"), ""),
                 "elapsed_ms": now_ms() - iv["started_at"],
-                "config": {"duration_minutes": cfg.get("duration_minutes", 15), "speech_lang": cfg.get("speech_lang", "en-IN"),
+                "config": {"duration_minutes": cfg.get("duration_minutes", 15), "speech_lang": lang["speech_lang"],
+                           "language": lang["language"], "language_code": lang["language_code"],
+                           "language_native": lang["language_native"],
                            "allow_typing": cfg.get("allow_typing", True), "persona": cfg.get("persona_name", "Noah"),
                            "video_bps": self.s.video_bps, "audio_bps": self.s.audio_bps,
                            "tts": bool(self.s.tts_enabled and self.ai.configured),
@@ -894,6 +904,7 @@ class Services:
         iv["coverage"] = state.get("topics", [])
         iv["flags"] = state.get("flags", [])
         iv["plan_summary"] = (state.get("plan") or {}).get("candidate_summary", "")
+        iv["language"] = (state.get("settings") or {}).get("language") or "English"
         iv.pop("state", None)
         return iv
 

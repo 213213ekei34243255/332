@@ -21,6 +21,11 @@ def _page(name):
     return resp
 
 
+def landing_page():
+    """The public front door ('/'): apply for an appointment or enter an interview code."""
+    return _page("landing.html")
+
+
 @bp.get("/staff", strict_slashes=False)
 def staff_dashboard():
     return _page("admin.html")

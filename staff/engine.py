@@ -1,6 +1,6 @@
 """The interview engine: plan -> adaptive turns -> evaluation.
 
-Gemini does the thinking (which question next, how deep to probe, how good the
+The Rexy model does the thinking (which question next, how deep to probe, how good the
 answer was); this module is the *director*: it keeps coverage/time/budget state
 in the database, enforces guardrails the model cannot be trusted with (never
 end early with required topics untouched, never run past the hard limit, never
@@ -10,7 +10,7 @@ import copy
 import logging
 import re
 
-from . import prompts
+from . import languages, prompts
 from .gemini import AIError
 from .schemas import Evaluation, InterviewPlan, TurnOut, clamp_int
 
@@ -37,7 +37,7 @@ class InterviewEngine:
         self.org = org_name
 
     # ------------------------------------------------------------------ state
-    def init_state(self, position, application):
+    def init_state(self, position, application, language=None):
         qs = (position.get("config") or {}).get("questions") or []
         topics = [{"id": "bg1", "text": "Background and motivation", "intent": "Understand the candidate and why this role",
                    "required": True, "weight": 3, "status": "untouched", "depth": 0, "asked": 0}]
@@ -45,13 +45,13 @@ class InterviewEngine:
             topics.append({"id": q["id"], "text": q["text"], "intent": q.get("intent", ""),
                            "required": bool(q.get("required", True)), "weight": q.get("weight", 3),
                            "status": "untouched", "depth": 0, "asked": 0})
-        settings = prompts.interview_settings(position)
+        settings = prompts.interview_settings(position, language)
         return {"plan": {}, "topics": topics, "turn_count": 0, "ai_turn_count": 0, "silent_streak": 0,
                 "flags": [], "settings": settings, "closing": False}
 
-    def start(self, position, application):
+    def start(self, position, application, language=None):
         """Build the plan and the opening line. Returns (state, opening_dict)."""
-        state = self.init_state(position, application)
+        state = self.init_state(position, application, language)
         settings = state["settings"]
         try:
             system, user = prompts.plan_prompt(position, application, settings, self.org)
@@ -70,9 +70,8 @@ class InterviewEngine:
         out = self._ask_model(position, application, state, [], prompts.opening_user(notes),
                               hint={"turn_count": 0, "pending": [t["id"] for t in state["topics"] if t["required"]],
                                     "all_topics": [t["id"] for t in state["topics"]], "max_turns": settings["max_turns"]})
-        reply = clean_spoken(out.reply) or (
-            f"Hi {_first_name(application)}, I'm {settings['persona']}, an AI interviewer. "
-            "To start, could you tell me a bit about yourself and what drew you to this role?")
+        reply = clean_spoken(out.reply) or languages.line(
+            settings.get("language_code"), "opening", name=_first_name(application), persona=settings["persona"])
         state["ai_turn_count"] = 1
         self._mark_asked(state, "bg1")
         return state, {"reply": reply, "move": "opening", "topic_id": "bg1", "assessment": "", "flag": ""}
@@ -133,6 +132,7 @@ class InterviewEngine:
     def _ask_model(self, position, application, state, prior_turns, user, hint):
         settings = state.get("settings") or prompts.interview_settings(position)
         system = prompts.turn_system(position, application, state, settings, self.org)
+        hint = dict(hint, language_code=settings.get("language_code") or "en")
         return self.ai.structured("turn", system, user, TurnOut, temperature=0.7, thinking="low",
                                   max_tokens=2000, hint=hint)
 
@@ -161,14 +161,13 @@ class InterviewEngine:
 
     @staticmethod
     def _closing_text(application, settings):
-        return (f"Thank you, {_first_name(application)}. That's everything I wanted to cover. "
-                "The hiring team will review your recording and be in touch. Take care!")
+        return languages.line(settings.get("language_code"), "closing", name=_first_name(application))
 
     @staticmethod
     def _fallback_reply(application, settings, end):
         if end:
             return InterviewEngine._closing_text(application, settings)
-        return "Thanks for sharing that. Could you give me a specific example from your own experience?"
+        return languages.line(settings.get("language_code"), "fallback")
 
     @staticmethod
     def _mark_asked(state, topic_id):
@@ -241,7 +240,8 @@ class InterviewEngine:
             data["recommendation"] = mapped
         # Evidence must be a verbatim candidate quote; drop anything the model invented.
         candidate_text = " ".join(t["body"] for t in turns if t["role"] == "candidate").lower()
-        norm = lambda s: re.sub(r"\s+", " ", re.sub(r"[^\w\s']", "", s.lower())).strip()
+        # ऀ-ൿ keeps Devanagari/Tamil/Telugu/Kannada/Malayalam vowel signs and viramas (not \w); ‌‍ the joiners
+        norm = lambda s: re.sub(r"\s+", " ", re.sub(r"[^\w\s'ऀ-ൿ‌‍]", "", s.lower())).strip()
         hay = norm(candidate_text)
         for ta in data["topic_assessments"]:
             ta["score"] = clamp_int(ta["score"], -1, 10, -1)

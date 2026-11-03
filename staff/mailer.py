@@ -194,7 +194,7 @@ def _shell(title, preheader, inner_html):
 <tr><td align="center">
 <table role="presentation" width="600" cellspacing="0" cellpadding="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e3e8f0;">
 <tr><td style="background:#0f2a4a;padding:22px 30px;color:#ffffff;font-size:18px;font-weight:600;letter-spacing:.2px;">{escape(s.org_name)}
-<div style="font-size:12px;font-weight:400;opacity:.75;margin-top:2px;">Talent Acquisition</div></td></tr>
+<div style="font-size:12px;font-weight:400;opacity:.75;margin-top:2px;">Teaching &amp; Staff Appointments</div></td></tr>
 <tr><td style="padding:30px;font-size:15px;line-height:1.6;">{inner_html}</td></tr>
 <tr><td style="padding:18px 30px;background:#f8f9fc;border-top:1px solid #e3e8f0;font-size:12px;color:#6b778c;line-height:1.5;">
 This message was sent by {escape(s.org_name)} because an application was submitted with this email address.
@@ -217,7 +217,8 @@ def render_invite(*, name, position_title, code, link, expires_text, duration_mi
         "Open the interview link above (or go to the interview page and type your code).",
         "Allow camera and microphone access when your browser asks.",
         "Complete a short device check and a quick face verification.",
-        "Have a spoken conversation with our AI interviewer about the role and your experience.",
+        "Choose the language you are most comfortable in (English, Malayalam, Kannada, Tamil, Telugu or Hindi) and have a "
+        "spoken conversation with our AI interviewer about the role and your experience.",
         "The session ends automatically; you will see a confirmation on screen.",
     ]
     prep = [

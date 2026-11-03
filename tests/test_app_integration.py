@@ -62,6 +62,15 @@ def test_staff_routes_are_mounted_and_veronica_untouched(real_app):
     assert r.status_code == 200 and r.get_json()["answer"] == "veronica says hi"
 
 
+def test_root_shows_the_college_front_door_with_both_logos(real_app):
+    app, _ = real_app
+    r = app.test_client().get("/")
+    html = r.get_data(as_text=True)
+    assert r.status_code == 200 and "Christ Junior College" in html
+    assert "/staff-static/img/cjc-logo.png" in html and "/staff-static/img/cogniai-logo.png" in html
+    assert 'href="/apply"' in html and 'href="/join"' in html
+
+
 def test_foyer_interview_endpoint_uses_gemini_with_same_contract(real_app):
     app, fg = real_app
     fg.replies.append(json.dumps({"message": "Tell me about a project.", "done": False}))

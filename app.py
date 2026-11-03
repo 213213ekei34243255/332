@@ -34,7 +34,7 @@ CORS(app, resources={r"/predict": {"origins": list(ALLOWED_ORIGINS)}}, methods=[
 
 # ---- Staff recruitment system ------------------------------------------------
 # Self-contained module (see staff/ and STAFF_README.md): /staff admin dashboard, /apply enrollment,
-# /join interview room, /api/recruit/* + /staff/api/* endpoints, Gemini interviewer, Google SMTP
+# /join interview room, /api/recruit/* + /staff/api/* endpoints, AI interviewer, Google SMTP
 # invitations and private video storage. It never touches the Veronica chatbot routes below, and a
 # failure to start it must not take the rest of the site down.
 try:
@@ -360,7 +360,11 @@ def widget_js():
 
 @app.route("/")
 def home():
-    return send_from_directory('templates', 'index.html')
+    # The old marketing page lives in templates/ when it is deployed; otherwise show the college appointments page.
+    if os.path.exists(os.path.join(app.root_path, 'templates', 'index.html')):
+        return send_from_directory('templates', 'index.html')
+    from staff.pages import landing_page
+    return landing_page()
 
 @app.route("/founders")
 def founder():

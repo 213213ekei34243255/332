@@ -9,10 +9,30 @@ const S = {
   speechOut: null, speechIn: null, recorder: null, queue: null, presence: null,
   events: [], eventTimer: null, timerInt: null, orbInt: null, startedAt: 0, durationMin: 15,
   overlay: { who: '', text: '' }, persona: 'Interviewer', micOk: false, meterInt: null,
-  finishing: false, typed: null, repeat: false, hiddenAt: 0,
+  finishing: false, typed: null, repeat: false, hiddenAt: 0, language: 'en',
 };
 
 const api = (path, opts = {}) => request(`/api/recruit/${path}`, { token: S.token, ...opts });
+
+// ------------------------------------------------------------------ interview language (English, Malayalam, Kannada, Tamil, Telugu, Hindi)
+const languageList = () => S.lookup?.interview?.languages || [];
+const langInfo = () => languageList().find((l) => l.code === S.language) || languageList()[0] || { code: 'en', name: 'English', native: 'English', speech_lang: 'en-IN', sample: 'Hello {name}. This is a quick sound check. If you can hear me, you are all set.' };
+function applyLanguage(code, speechLang) {
+  S.language = code;
+  const lang = speechLang || langInfo().speech_lang;
+  S.speechOut?.setLang(lang); S.speechIn?.setLang(lang);
+}
+function renderLanguages() {
+  const iv = S.lookup.interview;
+  S.language = iv.language || 'en';
+  const choose = iv.allow_language_choice && languageList().length > 1;
+  $('#lang-choose').hidden = !choose; $('#lang-fixed').hidden = choose;
+  if (!choose) { $('#lang-fixed').textContent = `This interview will be conducted in ${langInfo().name}${langInfo().code === 'en' ? '' : ` (${langInfo().native})`}.`; return; }
+  mount($('#lang-grid'), languageList().map((l) => h('button', {
+    type: 'button', class: `lang-opt${l.code === S.language ? ' on' : ''}`, role: 'radio', 'aria-checked': String(l.code === S.language), dataset: { code: l.code },
+    onclick: () => { applyLanguage(l.code, l.speech_lang); $$('.lang-opt').forEach((b) => { const on = b.dataset.code === l.code; b.classList.toggle('on', on); b.setAttribute('aria-checked', String(on)); }); },
+  }, h('strong', { lang: l.code }, l.native), h('span', null, l.code === 'en' ? 'English' : l.name))));
+}
 
 // ------------------------------------------------------------------ stage switching
 function show(name) {
@@ -40,6 +60,7 @@ async function lookup(code) {
     S.durationMin = data.interview.duration_minutes;
     $('#org').textContent = data.org;
     document.title = `Interview — ${data.position.title}`;
+    renderLanguages();
     $('#welcome-title').textContent = `Welcome, ${data.applicant.first_name}`;
     $('#welcome-sub').textContent = `${data.position.title}${data.position.department ? ' · ' + data.position.department : ''} — interviewed by ${S.persona}, an AI interviewer.`;
     $('#w-duration').textContent = data.interview.duration_minutes;
@@ -128,7 +149,7 @@ function ensureSpeech() {
   if (S.speechOut) return;
   const useServer = S.lookup.interview.tts;
   S.speechOut = new SpeechOut({
-    hub: S.hub, lang: S.lookup.interview.speech_lang || 'en-IN',
+    hub: S.hub, lang: langInfo().speech_lang || 'en-IN',
     fetchTts: useServer ? async (text) => {
       const res = await fetch('/api/recruit/interview/tts', {
         method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${S.token}` }, body: JSON.stringify({ text }),
@@ -138,7 +159,7 @@ function ensureSpeech() {
     } : null,
   });
   S.speechIn = new SpeechIn({
-    hub: S.hub, stream: S.stream, lang: S.lookup.interview.speech_lang || 'en-IN',
+    hub: S.hub, stream: S.stream, lang: langInfo().speech_lang || 'en-IN',
     transcribe: async (blob) => (await request('/api/recruit/interview/transcribe', { method: 'POST', body: blob, headers: { 'Content-Type': blob.type || 'audio/webm' }, token: S.token, timeout: 45000 })).text,
   });
 }
@@ -146,7 +167,7 @@ function ensureSpeech() {
 $('#speaker-test').addEventListener('click', async () => {
   ensureSpeech(); await S.hub.resume();
   const st = $('#speaker-status'); st.textContent = 'Playing…';
-  await S.speechOut.speak(`Hello ${S.lookup.applicant.first_name}. This is a quick sound check. If you can hear me, you're all set.`);
+  await S.speechOut.speak(langInfo().sample.replace('{name}', S.lookup.applicant.first_name));
   st.textContent = 'Did you hear it? If not, check your volume or output device.';
 });
 
@@ -217,10 +238,11 @@ async function startPrep() {
   $('#prep-sub').textContent = 'Your interviewer is reading the role and your background. This takes a few seconds.';
   try {
     if (!S.faceReady) S.engine.load().then(() => { S.faceReady = true; }).catch(() => {});
-    S.start = await api('interview/start', { method: 'POST', timeout: 120000 });
+    S.start = await api('interview/start', { method: 'POST', json: { language: S.language }, timeout: 120000 });
+    applyLanguage(S.start.config.language_code || S.language, S.start.config.speech_lang);     // a resumed interview keeps its language
     $('#prep-spinner').hidden = true;
     $('#prep-title').textContent = S.start.resumed ? 'Welcome back' : 'You’re all set';
-    $('#prep-sub').textContent = `${S.persona} will speak first. Answer out loud in your own words and pause when you’re finished — the interviewer replies after a short silence. Take your time.`;
+    $('#prep-sub').textContent = `${S.persona} will speak first${langInfo().code === 'en' ? '' : `, in ${langInfo().name}`}. Answer out loud in your own words and pause when you’re finished — the interviewer replies after a short silence. Take your time.`;
     $('#prep-begin').hidden = false;
   } catch (e) {
     $('#prep-spinner').hidden = true;

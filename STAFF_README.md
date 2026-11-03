@@ -1,4 +1,4 @@
-# Staff recruitment system
+# Staff recruitment system — Christ Junior College teaching & staff appointments
 
 Applicant Enrollment → Job Selection → Interview Code → Automated Email → Face Verification →
 AI Interview → Video Recording → AI Evaluation → Administrator Review.
@@ -17,14 +17,15 @@ backend at `/staff` keeps working as a standalone fallback (same API, cookie ses
 | `/join?code=ABCD-2345` | applicants | device check → face verification → AI voice interview (recorded) |
 | `/api/recruit/*` | applicant browser | public API (rate limited, token-scoped) |
 | `/staff/api/*` | dashboards | admin API: signed cookie + CSRF header, or `Authorization: Bearer` (Foyer). Video/photo/resume use one-resource `?st=` links minted by `POST /staff/api/media-url` (1 h) |
-| `POST /interview` | Foyer | existing endpoint, now answered by Gemini (falls back to the local model) |
+| `POST /interview` | Foyer | existing endpoint, now answered by the Rexy model (falls back to the local model) |
+| `/` | public | front door: apply, or enter an interview code (shown when `templates/index.html` is absent) |
 
 ## Setup (Render → Environment)
 
 See `.env.example`. The minimum:
 
 * `STAFF_ADMIN_PASSWORD` (or the existing `ADMIN_API_KEY`) — dashboard password.
-* `GEMINI_API_KEY`
+* `REXY_API_KEY` (the AI key)
 * `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER`, **`SMTP_PASSWORD`**, `SMTP_FROM_NAME`
 
 `SMTP_PASSWORD` must be a Google **App Password** (Google Account → Security → 2-Step Verification →
@@ -66,11 +67,15 @@ now shows a red warning (Overview and System) whenever it detects this.
 
 ## How the interview works
 
-* **Plan** – before the first question, Gemini reads the position (skills, eligibility, objectives),
+* **Languages** – every interview can run in English, Malayalam, Kannada, Tamil, Telugu or Hindi. The administrator sets a
+  default per position (and can let each applicant choose); the interviewer speaks and listens in that language, answers
+  may mix in English, and the final assessment is always written in English with verbatim quotes in the original script.
+  Fixed lines (greeting, goodbye) live in `staff/languages.py`.
+* **Plan** – before the first question, the Rexy model reads the position (skills, eligibility, objectives),
   the admin's topic seeds and the applicant's profile/résumé and writes a per-candidate plan: probe
   banks per topic ordered easy → hard, claims to verify, background angles.
-* **Turns** – every answer goes to Gemini with a *director's briefing* (elapsed time, coverage and depth
-  per topic, budget left). Gemini returns structured JSON: its private assessment of the answer, topic
+* **Turns** – every answer goes to the Rexy model with a *director's briefing* (elapsed time, coverage and depth
+  per topic, budget left). The model returns structured JSON: its private assessment of the answer, topic
   updates, and the sentence to speak. It rewrites topic seeds in its own words, follows up on what was
   actually said, and adapts difficulty. The server enforces what a model can't be trusted with: required
   topics get covered before it may end, a hard time/question cap, three silences end the session,
@@ -86,12 +91,12 @@ now shows a red warning (Overview and System) whenever it detects this.
 
 * Half-duplex, hands-free turn-taking (`web/voice.js`): the mic is closed while the interviewer speaks;
   voice-activity detection + adaptive end-of-speech timing decide when the candidate is done; Web
-  Speech recognition gives live captions and the audio segment is re-transcribed by Gemini when the
-  browser engine fails or is missing (Firefox). Interviewer voice is Gemini TTS (mixed into the
+  Speech recognition gives live captions and the audio segment is re-transcribed by the Rexy model when the
+  browser engine fails or is missing (Firefox). Interviewer voice is Rexy Voice (mixed into the
   recording) with fallback to a sentence-chunked, voice-ranked browser voice.
 * Face verification (`web/face.js`, MediaPipe Face Landmarker, vendored in `web/vendor/`, runs on-device):
   framing/lighting checks, then a server-chosen liveness challenge (blink / smile / open mouth / turn head).
-  Only one verification photo is uploaded; Gemini double-checks it is a single live person. During the
+  Only one verification photo is uploaded; the Rexy model double-checks it is a single live person. During the
   interview, face-missing / second-person / tab-switch signals are logged for reviewers (never auto-scored).
 * Video is composited in the browser (camera + captions + both voices) and uploaded in ordered 4-second
   chunks, so a dropped connection never loses the whole recording; reloading resumes the interview.
@@ -110,7 +115,7 @@ now shows a red warning (Overview and System) whenever it detects this.
 
 ```bash
 python staff_dev.py                  # staff system only, http://127.0.0.1:5055/staff  (STAFF_AI_MOCK=1 for no key)
-python -m pytest tests               # backend + Gemini layer (fake REST server through the real SDK)
+python -m pytest tests               # backend + AI layer (fake REST server through the real SDK)
 STAFF_TEST_DATABASE_URL=postgresql://... python -m pytest tests/test_staff_flow.py   # same suite on Postgres
 node tests/face_logic.test.mjs       # liveness state machines
 ```
